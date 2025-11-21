@@ -1,13 +1,13 @@
+import json
 import os
 import time
-import json
-import yaml
-import requests
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any
 from urllib.parse import unquote
-from distutils.util import strtobool
 
+import requests
+import yaml
 from pycti import OpenCTIConnectorHelper, get_config_variable
 
 
@@ -18,7 +18,10 @@ class DepConnector:
 
         self.interval = int(
             get_config_variable(
-                "CONNECTOR_RUN_INTERVAL", ["connector", "interval"], config, default=3600
+                "CONNECTOR_RUN_INTERVAL",
+                ["connector", "interval"],
+                config,
+                default=3600,
             )
         )
         self.lookback_days = int(
@@ -39,9 +42,7 @@ class DepConnector:
             default="",
         )
         if not self.client_id:
-            raise ValueError(
-                "DEP client ID must be provided via configuration"
-            )
+            raise ValueError("DEP client ID must be provided via configuration")
         self.login_endpoint = get_config_variable(
             "DEP_LOGIN_ENDPOINT",
             ["dep", "login_endpoint"],
@@ -86,25 +87,26 @@ class DepConnector:
         )
 
     @staticmethod
-    def _load_config() -> Dict[str, Any]:
+    def _load_config() -> dict[str, Any]:
+        # Resolve config path from environment variable or fallback to config.yml next to this file
         config_path = os.environ.get(
             "OPENCTI_CONFIG_FILE",
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yml"),
+            Path(__file__).resolve().parent / "config.yml",
         )
-        if os.path.exists(config_path):
-            with open(config_path, "r", encoding="utf-8") as config_file:
+        config_path = Path(config_path)
+        if config_path.exists():
+            with config_path.open(encoding="utf-8") as config_file:
                 return yaml.safe_load(config_file) or {}
         return {}
 
     @staticmethod
-    def _get_boolean_config(value: Any) -> bool:
-        if isinstance(value, bool):
-            return value
-        if value is None:
+    def _get_boolean_config(s: str) -> bool:
+        val = s.lower()
+        if val in ("y", "yes", "t", "true", "on", "1"):
+            return True
+        if val in ("n", "no", "f", "false", "off", "0"):
             return False
-        if isinstance(value, str):
-            return bool(strtobool(value))
-        return bool(value)
+        raise ValueError(f"Invalid truth value: {s}")
 
     def _authenticate(self) -> str:
         headers = {
@@ -133,7 +135,7 @@ class DepConnector:
             raise ValueError("Unable to retrieve IdToken from authentication response")
         return token
 
-    def _fetch_data(self, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+    def _fetch_data(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         token = self._authenticate()
         params = {
             "ts": start.strftime("%Y-%m-%d"),
@@ -165,7 +167,7 @@ class DepConnector:
         self.helper.log_warning("DEP API returned unexpected payload type")
         return []
 
-    def _create_victim_identity(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _create_victim_identity(self, item: dict[str, Any]) -> dict[str, Any] | None:
         victim_name = item.get("victim")
         if not victim_name:
             return None
@@ -183,7 +185,11 @@ class DepConnector:
             external_references.append(
                 {
                     "source_name": "victim-site",
-                    "url": f"https://{item['site']}" if not item["site"].startswith("http") else item["site"],
+                    "url": (
+                        f"https://{item['site']}"
+                        if not item["site"].startswith("http")
+                        else item["site"]
+                    ),
                 }
             )
 
@@ -207,7 +213,7 @@ class DepConnector:
         )
         return identity
 
-    def _create_intrusion_set(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _create_intrusion_set(self, item: dict[str, Any]) -> dict[str, Any] | None:
         actor_name = item.get("actor")
         if not actor_name:
             return None
@@ -221,10 +227,10 @@ class DepConnector:
 
     def _create_incident(
         self,
-        item: Dict[str, Any],
-        victim: Optional[Dict[str, Any]],
-        actor: Optional[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
+        item: dict[str, Any],
+        victim: dict[str, Any] | None,
+        actor: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
         victim_name = victim["name"] if victim else item.get("victim", "Unknown victim")
         incident_name = f"DEP announcement - {victim_name}"
         description = item.get("annDescription") or item.get("description")
@@ -243,7 +249,9 @@ class DepConnector:
             external_reference["url"] = item["annLink"]
         elif item.get("site"):
             site = item["site"]
-            external_reference["url"] = site if site.startswith("http") else f"https://{site}"
+            external_reference["url"] = (
+                site if site.startswith("http") else f"https://{site}"
+            )
         if item.get("annTitle"):
             external_reference["description"] = item["annTitle"]
 
@@ -257,7 +265,7 @@ class DepConnector:
         )
         return incident
 
-    def _create_site_indicator(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _create_site_indicator(self, item: dict[str, Any]) -> dict[str, Any] | None:
         if not self.enable_site_indicator:
             return None
         domain = item.get("victimDomain") or item.get("site")
@@ -273,11 +281,11 @@ class DepConnector:
             pattern_type="stix",
             pattern=f"[domain-name:value = '{domain}']",
             confidence=self.helper.connect_confidence_level,
-            valid_from=datetime.utcnow().isoformat(),
+            valid_from=datetime.now(datetime.timezone.utc).isoformat(),
         )
         return indicator
 
-    def _create_hash_indicator(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _create_hash_indicator(self, item: dict[str, Any]) -> dict[str, Any] | None:
         if not self.enable_hash_indicator:
             return None
         hash_value = item.get("hashid")
@@ -300,11 +308,11 @@ class DepConnector:
         return indicator
 
     @staticmethod
-    def _detect_hash_type(hash_value: str) -> Optional[str]:
+    def _detect_hash_type(hash_value: str) -> str | None:
         length_to_type = {32: "MD5", 40: "SHA-1", 64: "SHA-256"}
         return length_to_type.get(len(hash_value))
 
-    def _resolve_location(self, country: str) -> Optional[str]:
+    def _resolve_location(self, country: str) -> str | None:
         if not country:
             return None
         try:
@@ -314,15 +322,17 @@ class DepConnector:
             if result:
                 return result.get("id")
         except Exception as error:  # pylint: disable=broad-except
-            self.helper.log_warning(f"Unable to resolve location for {country}: {error}")
+            self.helper.log_warning(
+                f"Unable to resolve location for {country}: {error}"
+            )
         return None
 
     def _link_entities(
         self,
-        victim: Optional[Dict[str, Any]],
-        actor: Optional[Dict[str, Any]],
-        incident: Optional[Dict[str, Any]],
-        indicators: List[Dict[str, Any]],
+        victim: dict[str, Any] | None,
+        actor: dict[str, Any] | None,
+        incident: dict[str, Any] | None,
+        indicators: list[dict[str, Any]],
     ) -> None:
         if not incident:
             return
@@ -361,14 +371,14 @@ class DepConnector:
                     f"Unable to create indicates relationship for indicator {indicator.get('id')}: {error}"
                 )
 
-    def _process_item(self, item: Dict[str, Any]) -> None:
+    def _process_item(self, item: dict[str, Any]) -> None:
         victim = self._create_victim_identity(item)
         # Intrusion set creation is intentionally disabled because datasets may
         # include non-adversarial actors.
-        actor: Optional[Dict[str, Any]] = None
+        actor: dict[str, Any] | None = None
         incident = self._create_incident(item, victim, actor)
 
-        indicators: List[Dict[str, Any]] = []
+        indicators: list[dict[str, Any]] = []
         site_indicator = self._create_site_indicator(item)
         if site_indicator:
             indicators.append(site_indicator)

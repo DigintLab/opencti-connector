@@ -1,13 +1,40 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS builder
+HEALTHCHECK NONE
 
-ENV CONNECTOR_HOME=/opt/opencti-connector
-WORKDIR ${CONNECTOR_HOME}
+ENV UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PYTHON=python3.11 \
+    UV_NO_PROGRESS=1
 
-RUN pip install --no-cache-dir --upgrade pip
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+WORKDIR /app
+RUN --mount=type=cache,target=/root/.cache \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync \
+    --locked \
+    --no-dev \
+    --no-install-project --no-editable
+COPY pyproject.toml uv.lock ./
+COPY *.py ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable --no-dev
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+FROM python:3.11-slim AS runtime
+HEALTHCHECK NONE
 
-COPY connector.py config.yml ./
+ENV PATH="/app/.venv/bin:${PATH}"
 
+RUN apt update && apt install -y libmagic-dev
+
+# RUN addgroup -g 1000 app && adduser -G app -u 999 -s /sbin/nologin -h /app app -D
+RUN adduser --system --no-create-home app
+WORKDIR /app
+COPY --from=builder /app /app
+RUN chmod -R a+r .
+LABEL org.opencontainers.image.source=https://github.com/DigintLab/opencti-connector
+LABEL org.opencontainers.image.description="The Double Extortion connector ingests ransomware and data leak announcements published on the DoubleExtortion platform and converts them into STIX entities inside OpenCTI."
+
+USER app
 ENTRYPOINT ["python", "connector.py"]
