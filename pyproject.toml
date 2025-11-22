@@ -5,7 +5,13 @@ description = "The Double Extortion connector ingests ransomware and data leak a
 authors = [{ name = "Luca Mella", email = "lm@digintlab.com" }]
 requires-python = ">=3.11"
 readme = "README.md"
-dependencies = ["pycti>=6.8.13", "pyyaml>=6.0.3", "requests>=2.32.5"]
+dependencies = [
+    "pycti>=6.8.13",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-requests>=2.32.4.20250913",
+]
 
 [project.urls]
 Homepage = "https://github.com/DigintLab/opencti-connector"
@@ -26,10 +32,21 @@ build-backend = "hatchling.build"
 output-format = "github"
 
 [tool.ruff.lint]
+ignore = [
+    "BLE001",
+    "COM812",
+    "D1",
+    "D2",
+    "D4",
+    "ERA001",
+    "FIX002",
+    "PLR0913",
+    "TD003",
+    "TRY003",
+]
 fixable = ["ALL"]
 unfixable = []
 select = ["ALL"]
-ignore = ["COM812", "D1", "D2", "D4", "ERA001", "FIX002", "PLR0913", "TD003"]
 
 [tool.ruff.format]
 docstring-code-format = true

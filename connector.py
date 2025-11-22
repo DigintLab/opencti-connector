@@ -1,14 +1,17 @@
 import json
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
 import requests
 import yaml
-from pycti import OpenCTIConnectorHelper, get_config_variable
+from pycti import (  # type: ignore[import-untyped]
+    OpenCTIConnectorHelper,
+    get_config_variable,
+)
 
 
 class DepConnector:
@@ -42,7 +45,8 @@ class DepConnector:
             default="",
         )
         if not self.client_id:
-            raise ValueError("DEP client ID must be provided via configuration")
+            error = "DEP client ID must be provided via configuration"
+            raise ValueError(error)
         self.login_endpoint = get_config_variable(
             "DEP_LOGIN_ENDPOINT",
             ["dep", "login_endpoint"],
@@ -106,7 +110,8 @@ class DepConnector:
             return True
         if val in ("n", "no", "f", "false", "off", "0"):
             return False
-        raise ValueError(f"Invalid truth value: {s}")
+        error = f"Invalid truth value: {s}"
+        raise ValueError(error)
 
     def _authenticate(self) -> str:
         headers = {
@@ -126,13 +131,12 @@ class DepConnector:
         )
         response.raise_for_status()
         data = response.json()
-        token = (
-            data.get("AuthenticationResult", {}).get("IdToken")
-            if isinstance(data, dict)
-            else None
-        )
-        if not token:
-            raise ValueError("Unable to retrieve IdToken from authentication response")
+
+        try:
+            token = str(data.get("AuthenticationResult").get("IdToken"))
+        except ValueError as e:
+            error = "Unable to retrieve IdToken from authentication response"
+            raise ValueError(error) from e
         return token
 
     def _fetch_data(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
@@ -160,7 +164,8 @@ class DepConnector:
         try:
             data = response.json()
         except json.JSONDecodeError as exception:
-            raise ValueError("Unable to decode DEP API response") from exception
+            message = "Unable to decode DEP API response"
+            raise ValueError(message) from exception
 
         if isinstance(data, list):
             return data
@@ -203,7 +208,7 @@ class DepConnector:
         country = item.get("country")
         location_id = self._resolve_location(country) if country else None
 
-        identity = self.helper.api.identity.create(
+        return self.helper.api.identity.create(
             type="Organization",
             name=victim_name,
             description=description,
@@ -211,25 +216,22 @@ class DepConnector:
             external_references=external_references,
             x_opencti_location=location_id,
         )
-        return identity
 
     def _create_intrusion_set(self, item: dict[str, Any]) -> dict[str, Any] | None:
         actor_name = item.get("actor")
         if not actor_name:
             return None
-        intrusion_set = self.helper.api.intrusion_set.create(
+        return self.helper.api.intrusion_set.create(
             name=actor_name,
             description="Threat actor",
             aliases=[actor_name],
             confidence=self.helper.connect_confidence_level,
         )
-        return intrusion_set
 
     def _create_incident(
         self,
         item: dict[str, Any],
         victim: dict[str, Any] | None,
-        actor: dict[str, Any] | None,
     ) -> dict[str, Any] | None:
         victim_name = victim["name"] if victim else item.get("victim", "Unknown victim")
         incident_name = f"DEP announcement - {victim_name}"
@@ -255,7 +257,7 @@ class DepConnector:
         if item.get("annTitle"):
             external_reference["description"] = item["annTitle"]
 
-        incident = self.helper.api.incident.create(
+        return self.helper.api.incident.create(
             name=incident_name,
             description=description,
             first_seen=first_seen,
@@ -263,7 +265,6 @@ class DepConnector:
             confidence=self.helper.connect_confidence_level,
             external_references=[external_reference],
         )
-        return incident
 
     def _create_site_indicator(self, item: dict[str, Any]) -> dict[str, Any] | None:
         if not self.enable_site_indicator:
@@ -275,15 +276,14 @@ class DepConnector:
         domain = domain.replace("https://", "").replace("http://", "")
         if not domain:
             return None
-        indicator = self.helper.api.indicator.create(
+        return self.helper.api.indicator.create(
             name=f"Domain associated with {item.get('victim', 'unknown victim')}",
             description="Victim domain",
             pattern_type="stix",
             pattern=f"[domain-name:value = '{domain}']",
             confidence=self.helper.connect_confidence_level,
-            valid_from=datetime.now(datetime.timezone.utc).isoformat(),
+            valid_from=datetime.now(UTC).isoformat(),
         )
-        return indicator
 
     def _create_hash_indicator(self, item: dict[str, Any]) -> dict[str, Any] | None:
         if not self.enable_hash_indicator:
@@ -297,15 +297,14 @@ class DepConnector:
         hash_type = self._detect_hash_type(hash_value)
         if not hash_type:
             return None
-        indicator = self.helper.api.indicator.create(
+        return self.helper.api.indicator.create(
             name=f"Announcement hash for {item.get('victim', 'unknown victim')}",
             description="Hash identifier for tracking",
             pattern_type="stix",
             pattern=f"[file:hashes.'{hash_type}' = '{hash_value}']",
             confidence=self.helper.connect_confidence_level,
-            valid_from=datetime.utcnow().isoformat(),
+            valid_from=datetime.now(UTC).isoformat(),
         )
-        return indicator
 
     @staticmethod
     def _detect_hash_type(hash_value: str) -> str | None:
@@ -320,7 +319,7 @@ class DepConnector:
                 filters=[{"key": "x_opencti_aliases", "values": [country]}]
             )
             if result:
-                return result.get("id")
+                return str(result.get("id"))
         except Exception as error:  # pylint: disable=broad-except
             self.helper.log_warning(
                 f"Unable to resolve location for {country}: {error}"
@@ -330,20 +329,12 @@ class DepConnector:
     def _link_entities(
         self,
         victim: dict[str, Any] | None,
-        actor: dict[str, Any] | None,
         incident: dict[str, Any] | None,
         indicators: list[dict[str, Any]],
     ) -> None:
         if not incident:
             return
         incident_id = incident.get("id")
-        if actor:
-            self.helper.api.stix_core_relationship.create(
-                relationship_type="attributed-to",
-                source_ref=incident_id,
-                target_ref=actor["id"],
-                confidence=self.helper.connect_confidence_level,
-            )
         if victim:
             self.helper.api.stix_core_relationship.create(
                 relationship_type="targets",
@@ -351,13 +342,6 @@ class DepConnector:
                 target_ref=victim["id"],
                 confidence=self.helper.connect_confidence_level,
             )
-            if actor:
-                self.helper.api.stix_core_relationship.create(
-                    relationship_type="targets",
-                    source_ref=actor["id"],
-                    target_ref=victim["id"],
-                    confidence=self.helper.connect_confidence_level,
-                )
         for indicator in indicators:
             try:
                 self.helper.api.stix_core_relationship.create(
@@ -375,8 +359,7 @@ class DepConnector:
         victim = self._create_victim_identity(item)
         # Intrusion set creation is intentionally disabled because datasets may
         # include non-adversarial actors.
-        actor: dict[str, Any] | None = None
-        incident = self._create_incident(item, victim, actor)
+        incident = self._create_incident(item, victim)
 
         indicators: list[dict[str, Any]] = []
         site_indicator = self._create_site_indicator(item)
@@ -386,12 +369,12 @@ class DepConnector:
         if hash_indicator:
             indicators.append(hash_indicator)
 
-        self._link_entities(victim, actor, incident, indicators)
+        self._link_entities(victim, incident, indicators)
 
     def _run_cycle(self) -> None:
         current_state = self.helper.get_state() or {}
         last_run_str = current_state.get("last_run")
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         if last_run_str:
             try:
                 start = datetime.fromisoformat(last_run_str)
