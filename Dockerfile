@@ -28,11 +28,9 @@ ENV PATH="/app/.venv/bin:${PATH}"
 
 RUN apt update && apt install -y libmagic-dev
 
-# RUN addgroup -g 1000 app && adduser -G app -u 999 -s /sbin/nologin -h /app app -D
 RUN adduser --system --no-create-home app
 WORKDIR /app
 COPY --from=builder /app /app
-RUN chmod -R a+r .
 LABEL org.opencontainers.image.source=https://github.com/DigintLab/opencti-connector
 LABEL org.opencontainers.image.description="The Double Extortion connector ingests ransomware and data leak announcements published on the DoubleExtortion platform and converts them into STIX entities inside OpenCTI."
 
