@@ -17,27 +17,27 @@ All configuration values can be supplied via the `config.yml` file or through en
 
 ### Required values
 
-| YAML path | Environment variable | Description |
-|-----------|---------------------|-------------|
-| `opencti.url` | `OPENCTI_URL` | URL of your OpenCTI platform. |
-| `opencti.token` | `OPENCTI_TOKEN` | API token for OpenCTI. |
-| `dep.username` | `DEP_USERNAME` | Username for the Double Extortion Platform portal. |
-| `dep.password` | `DEP_PASSWORD` | Password for the portal. |
-| `dep.api_key` | `DEP_API_KEY` | API key issued by the Double Extortion Platform. |
+| YAML path       | Environment variable | Description                                        |
+| --------------- | -------------------- | -------------------------------------------------- |
+| `opencti.url`   | `OPENCTI_URL`        | URL of your OpenCTI platform.                      |
+| `opencti.token` | `OPENCTI_TOKEN`      | API token for OpenCTI.                             |
+| `dep.username`  | `DEP_USERNAME`       | Username for the Double Extortion Platform portal. |
+| `dep.password`  | `DEP_PASSWORD`       | Password for the portal.                           |
+| `dep.api_key`   | `DEP_API_KEY`        | API key issued by the Double Extortion Platform.   |
 
 ### Optional values
 
-| YAML path | Environment variable | Default | Description |
-|-----------|---------------------|---------|-------------|
-| `connector.interval` | `CONNECTOR_RUN_INTERVAL` | `3600` | Interval in seconds between executions. |
-| `dep.client_id` | `DEP_CLIENT_ID` | `""` | AWS Cognito App Client ID (required). |
-| `dep.login_endpoint` | `DEP_LOGIN_ENDPOINT` | `https://cognito-idp.eu-west-1.amazonaws.com/` | Cognito login endpoint. |
-| `dep.api_endpoint` | `DEP_API_ENDPOINT` | `https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist` | REST endpoint for announcements. |
-| `dep.lookback_days` | `DEP_LOOKBACK_DAYS` | `7` | Days to look back on the first run. |
-| `dep.extended_results` | `DEP_EXTENDED_RESULTS` | `true` | Request extended leak information. |
-| `dep.dset` | `DEP_DSET` | `ext` | Dataset to query (for example `ext`, `sanctions`). |
-| `dep.enable_site_indicator` | `DEP_ENABLE_SITE_INDICATOR` | `true` | Create a domain indicator per victim. |
-| `dep.enable_hash_indicator` | `DEP_ENABLE_HASH_INDICATOR` | `true` | Create a hash indicator when a hash is provided. |
+| YAML path                   | Environment variable        | Default                                                   | Description                                        |
+| --------------------------- | --------------------------- | --------------------------------------------------------- | -------------------------------------------------- |
+| `connector.interval`        | `CONNECTOR_RUN_INTERVAL`    | `3600`                                                    | Interval in seconds between executions.            |
+| `dep.client_id`             | `DEP_CLIENT_ID`             | `""`                                                      | AWS Cognito App Client ID (required).              |
+| `dep.login_endpoint`        | `DEP_LOGIN_ENDPOINT`        | `https://cognito-idp.eu-west-1.amazonaws.com/`            | Cognito login endpoint.                            |
+| `dep.api_endpoint`          | `DEP_API_ENDPOINT`          | `https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist` | REST endpoint for announcements.                   |
+| `dep.lookback_days`         | `DEP_LOOKBACK_DAYS`         | `7`                                                       | Days to look back on the first run.                |
+| `dep.extended_results`      | `DEP_EXTENDED_RESULTS`      | `true`                                                    | Request extended leak information.                 |
+| `dep.dset`                  | `DEP_DSET`                  | `ext`                                                     | Dataset to query (for example `ext`, `sanctions`). |
+| `dep.enable_site_indicator` | `DEP_ENABLE_SITE_INDICATOR` | `true`                                                    | Create a domain indicator per victim.              |
+| `dep.enable_hash_indicator` | `DEP_ENABLE_HASH_INDICATOR` | `true`                                                    | Create a hash indicator when a hash is provided.   |
 
 ## Running locally
 
