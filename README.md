@@ -11,6 +11,18 @@ The Double Extortion connector ingests ransomware and data leak announcements pu
 - Supports querying different Double Extortion Platform datasets via `DEP_DSET`.
 - Maintains connector state to avoid re-ingesting older records.
 
+## Running locally
+
+1. Copy `config_example.yml` to `config.yml` and update it with your DEP credentials and OpenCTI configuration.
+
+2. Copy `.env_example` to `.env` and update it with your OpenCTI configuration.
+
+3. Run the services:
+
+   ```bash
+   docker compose up
+   ```
+
 ## Configuration
 
 All configuration values can be supplied via the `config.yml` file or through environment variables. Environment variables take precedence and follow the naming convention described below.
@@ -39,22 +51,6 @@ All configuration values can be supplied via the `config.yml` file or through en
 | `dep.enable_site_indicator` | `DEP_ENABLE_SITE_INDICATOR` | `true`                                                    | Create a domain indicator per victim.              |
 | `dep.enable_hash_indicator` | `DEP_ENABLE_HASH_INDICATOR` | `true`                                                    | Create a hash indicator when a hash is provided.   |
 
-## Running locally
-
-1. Install the dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. Copy `config.yml` and update it with your credentials and OpenCTI configuration.
-
-3. Start the connector:
-
-   ```bash
-   python connector.py
-   ```
-
 ## Docker
 
 A Dockerfile is provided to run the connector in a containerized environment. Build the image with:
@@ -77,6 +73,8 @@ docker run --rm \
 
 ## Development notes
 
+- The project uses [**go-task**](https://github.com/go-task/task) with a `Taskfile.yml` to streamline common development commands.
+- The project uses [**uv**](https://docs.astral.sh/uv/) as the Python virtual environment and dependency management tool.
 - The connector keeps track of the last successful execution timestamp in the OpenCTI worker state. Delete the state in OpenCTI to re-ingest older records.
 - The API occasionally URL-encodes announcement descriptions. The connector automatically decodes the description before sending it to OpenCTI.
 - Intrusion set creation is disabled by default because not every dataset represents a threat actor. If needed, adapt the logic in `DepConnector._process_item`.

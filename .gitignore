@@ -1,4 +1,5 @@
-.venv
+.config.yml
+.env
 .mypy_cache
 .ruff_cache
-.env
+.venv
