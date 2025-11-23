@@ -19,22 +19,22 @@ class DepConnector:
         config = self._load_config()
         self.helper = OpenCTIConnectorHelper(config)
 
-        self.interval = int(
-            get_config_variable(
-                "CONNECTOR_RUN_INTERVAL",
-                ["connector", "interval"],
-                config,
-                default=3600,
-            )
+        self.interval = get_config_variable(
+            "CONNECTOR_RUN_INTERVAL",
+            ["connector", "interval"],
+            config,
+            default=3600,
+            isNumber=True,
         )
-        self.lookback_days = int(
-            get_config_variable(
-                "DEP_LOOKBACK_DAYS",
-                ["dep", "lookback_days"],
-                config,
-                default=7,
-            )
+
+        self.lookback_days = get_config_variable(
+            "DEP_LOOKBACK_DAYS",
+            ["dep", "lookback_days"],
+            config,
+            default=7,
+            isNumber=True,
         )
+
         self.api_key = get_config_variable("DEP_API_KEY", ["dep", "api_key"], config)
         self.username = get_config_variable("DEP_USERNAME", ["dep", "username"], config)
         self.password = get_config_variable("DEP_PASSWORD", ["dep", "password"], config)
@@ -65,29 +65,24 @@ class DepConnector:
             config,
             default="ext",
         )
-        self.extended_results = self._get_boolean_config(
-            get_config_variable(
-                "DEP_EXTENDED_RESULTS",
-                ["dep", "extended_results"],
-                config,
-                default=True,
-            )
+        self.extended_results = get_config_variable(
+            "DEP_EXTENDED_RESULTS",
+            ["dep", "extended_results"],
+            config,
+            default=True,
         )
-        self.enable_site_indicator = self._get_boolean_config(
-            get_config_variable(
-                "DEP_ENABLE_SITE_INDICATOR",
-                ["dep", "enable_site_indicator"],
-                config,
-                default=True,
-            )
+        self.enable_site_indicator = get_config_variable(
+            "DEP_ENABLE_SITE_INDICATOR",
+            ["dep", "enable_site_indicator"],
+            config,
+            default=True,
         )
-        self.enable_hash_indicator = self._get_boolean_config(
-            get_config_variable(
-                "DEP_ENABLE_HASH_INDICATOR",
-                ["dep", "enable_hash_indicator"],
-                config,
-                default=True,
-            )
+
+        self.enable_hash_indicator = get_config_variable(
+            "DEP_ENABLE_HASH_INDICATOR",
+            ["dep", "enable_hash_indicator"],
+            config,
+            default=True,
         )
 
     @staticmethod
@@ -102,16 +97,6 @@ class DepConnector:
             with config_path.open(encoding="utf-8") as config_file:
                 return yaml.safe_load(config_file) or {}
         return {}
-
-    @staticmethod
-    def _get_boolean_config(s: str) -> bool:
-        val = s.lower()
-        if val in ("y", "yes", "t", "true", "on", "1"):
-            return True
-        if val in ("n", "no", "f", "false", "off", "0"):
-            return False
-        error = f"Invalid truth value: {s}"
-        raise ValueError(error)
 
     def _authenticate(self) -> str:
         headers = {
@@ -131,7 +116,6 @@ class DepConnector:
         )
         response.raise_for_status()
         data = response.json()
-
         try:
             token = str(data.get("AuthenticationResult").get("IdToken"))
         except ValueError as e:
@@ -416,5 +400,4 @@ class DepConnector:
 
 
 if __name__ == "__main__":
-    connector = DepConnector()
-    connector.run()
+    DepConnector().run()
