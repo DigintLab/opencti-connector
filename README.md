@@ -78,6 +78,7 @@ docker run --rm \
 - The connector keeps track of the last successful execution timestamp in the OpenCTI worker state. Delete the state in OpenCTI to re-ingest older records.
 - The API occasionally URL-encodes announcement descriptions. The connector automatically decodes the description before sending it to OpenCTI.
 - Intrusion set creation is disabled by default because not every dataset represents a threat actor. If needed, adapt the logic in `DepConnector._process_item`.
+- To reload the new code inside the platform using docker compose run: `docker compose build dep-connector; docker compose up -d dep-connector; docker compose logs -f dep-connector`
 
 ## License
 

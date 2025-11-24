@@ -53,6 +53,7 @@ class DepConnector:
             config,
             default="https://cognito-idp.eu-west-1.amazonaws.com/",
         )
+
         self.api_endpoint = get_config_variable(
             "DEP_API_ENDPOINT",
             ["dep", "api_endpoint"],
@@ -118,7 +119,7 @@ class DepConnector:
         data = response.json()
         try:
             token = str(data.get("AuthenticationResult").get("IdToken"))
-        except ValueError as e:
+        except Exception as e:
             error = "Unable to retrieve IdToken from authentication response"
             raise ValueError(error) from e
         return token
@@ -215,9 +216,8 @@ class DepConnector:
     def _create_incident(
         self,
         item: dict[str, Any],
-        victim: dict[str, Any] | None,
     ) -> dict[str, Any] | None:
-        victim_name = victim["name"] if victim else item.get("victim", "Unknown victim")
+        victim_name = item.get("victim", "Unknown victim")
         incident_name = f"DEP announcement - {victim_name}"
         description = item.get("annDescription") or item.get("description")
         if description:
@@ -225,11 +225,25 @@ class DepConnector:
         announcement_date = item.get("date")
         first_seen = None
         if announcement_date:
-            try:
-                first_seen = datetime.fromisoformat(announcement_date).isoformat()
-            except ValueError:
-                first_seen = announcement_date
-
+            cleaned = announcement_date.strip().rstrip("Zz")  # drop trailing dot/“Z”
+            parsed = None
+            for fmt in (
+                "%Y-%m-%d",
+                "%Y/%m/%d",
+                "%Y-%m-%dT%H:%M:%S",
+                "%Y-%m-%dT%H:%M:%S.%f",
+            ):
+                try:
+                    parsed = datetime.strptime(cleaned, fmt)
+                    break
+                except ValueError:
+                    continue
+            if parsed:
+                first_seen = parsed.replace(tzinfo=UTC).isoformat()
+            else:
+                self.helper.log_warning(
+                    f"Skipping invalid announcement date: {announcement_date}"
+                )
         external_reference = {"source_name": "dep"}
         if item.get("annLink"):
             external_reference["url"] = item["annLink"]
@@ -240,7 +254,6 @@ class DepConnector:
             )
         if item.get("annTitle"):
             external_reference["description"] = item["annTitle"]
-
         return self.helper.api.incident.create(
             name=incident_name,
             description=description,
@@ -319,19 +332,22 @@ class DepConnector:
         if not incident:
             return
         incident_id = incident.get("id")
+        if not incident_id:
+            self.helper.log_warning("Skipping relationships: incident has no id")
+            return
         if victim:
             self.helper.api.stix_core_relationship.create(
                 relationship_type="targets",
-                source_ref=incident_id,
-                target_ref=victim["id"],
+                fromId=incident_id,
+                toId=victim["id"],
                 confidence=self.helper.connect_confidence_level,
             )
         for indicator in indicators:
             try:
                 self.helper.api.stix_core_relationship.create(
                     relationship_type="indicates",
-                    source_ref=indicator["id"],
-                    target_ref=incident_id,
+                    fromId=indicator["id"],
+                    toId=incident_id,
                     confidence=self.helper.connect_confidence_level,
                 )
             except Exception as error:  # pylint: disable=broad-except
@@ -343,7 +359,7 @@ class DepConnector:
         victim = self._create_victim_identity(item)
         # Intrusion set creation is intentionally disabled because datasets may
         # include non-adversarial actors.
-        incident = self._create_incident(item, victim)
+        incident = self._create_incident(item)
 
         indicators: list[dict[str, Any]] = []
         site_indicator = self._create_site_indicator(item)
