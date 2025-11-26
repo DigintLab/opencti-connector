@@ -18,6 +18,16 @@ class DepConnector:
     def __init__(self) -> None:
         config = self._load_config()
         self.helper = OpenCTIConnectorHelper(config)
+        self.organization = self.helper.api.identity.create(
+            type="Organization",
+            name="DigIntLab",
+            description="We Track and Monitor the Cyber Space",
+            contact_information="https://doubleextortion.com/",
+        )
+        self.digintlab_label = self.helper.api.label.create(
+            value="DigIntLab",
+            color="#730000",
+        )
 
         self.interval = get_config_variable(
             "CONNECTOR_RUN_INTERVAL",
@@ -26,7 +36,6 @@ class DepConnector:
             default=3600,
             isNumber=True,
         )
-
         self.lookback_days = get_config_variable(
             "DEP_LOOKBACK_DAYS",
             ["dep", "lookback_days"],
@@ -34,15 +43,14 @@ class DepConnector:
             default=7,
             isNumber=True,
         )
-
+        self.confidence = get_config_variable(
+            "DEP_CONFIDENCE", ["dep", "confidence"], config, default=70, isNumber=True
+        )
         self.api_key = get_config_variable("DEP_API_KEY", ["dep", "api_key"], config)
         self.username = get_config_variable("DEP_USERNAME", ["dep", "username"], config)
         self.password = get_config_variable("DEP_PASSWORD", ["dep", "password"], config)
         self.client_id = get_config_variable(
-            "DEP_CLIENT_ID",
-            ["dep", "client_id"],
-            config,
-            default="",
+            "DEP_CLIENT_ID", ["dep", "client_id"], config, default=""
         )
         if not self.client_id:
             error = "DEP client ID must be provided via configuration"
@@ -53,6 +61,7 @@ class DepConnector:
             config,
             default="https://cognito-idp.eu-west-1.amazonaws.com/",
         )
+
         self.api_endpoint = get_config_variable(
             "DEP_API_ENDPOINT",
             ["dep", "api_endpoint"],
@@ -118,7 +127,7 @@ class DepConnector:
         data = response.json()
         try:
             token = str(data.get("AuthenticationResult").get("IdToken"))
-        except ValueError as e:
+        except Exception as e:
             error = "Unable to retrieve IdToken from authentication response"
             raise ValueError(error) from e
         return token
@@ -129,6 +138,7 @@ class DepConnector:
             "ts": start.strftime("%Y-%m-%d"),
             "te": end.strftime("%Y-%m-%d"),
             "dset": self.dataset,
+            "full": "true",
         }
         if self.extended_results:
             params["extended"] = "true"
@@ -194,11 +204,13 @@ class DepConnector:
 
         return self.helper.api.identity.create(
             type="Organization",
+            createdBy=self.organization["id"],
             name=victim_name,
             description=description,
-            confidence=self.helper.connect_confidence_level,
+            confidence=self.confidence,
             external_references=external_references,
             x_opencti_location=location_id,
+            objectLabel=self.digintlab_label["id"],
         )
 
     def _create_intrusion_set(self, item: dict[str, Any]) -> dict[str, Any] | None:
@@ -207,17 +219,18 @@ class DepConnector:
             return None
         return self.helper.api.intrusion_set.create(
             name=actor_name,
+            createdBy=self.organization["id"],
             description="Threat actor",
             aliases=[actor_name],
-            confidence=self.helper.connect_confidence_level,
+            objectLabel=self.digintlab_label["id"],
+            confidence=self.confidence,
         )
 
     def _create_incident(
         self,
         item: dict[str, Any],
-        victim: dict[str, Any] | None,
     ) -> dict[str, Any] | None:
-        victim_name = victim["name"] if victim else item.get("victim", "Unknown victim")
+        victim_name = item.get("victim", "Unknown victim")
         incident_name = f"DEP announcement - {victim_name}"
         description = item.get("annDescription") or item.get("description")
         if description:
@@ -225,11 +238,26 @@ class DepConnector:
         announcement_date = item.get("date")
         first_seen = None
         if announcement_date:
-            try:
-                first_seen = datetime.fromisoformat(announcement_date).isoformat()
-            except ValueError:
-                first_seen = announcement_date
+            cleaned = announcement_date.strip().rstrip("Zz")
+            parsed = None
+            for fmt in (
+                "%Y-%m-%d",
+                "%Y/%m/%d",
+                "%Y-%m-%dT%H:%M:%S",
+                "%Y-%m-%dT%H:%M:%S.%f",
+            ):
+                try:
+                    parsed = datetime.strptime(cleaned, fmt)  # noqa: DTZ007
+                    break
+                except ValueError:
+                    continue
 
+            if parsed:
+                first_seen = parsed.replace(tzinfo=UTC).isoformat()
+            else:
+                self.helper.log_warning(
+                    f"Skipping invalid announcement date: {announcement_date}"
+                )
         external_reference = {"source_name": "dep"}
         if item.get("annLink"):
             external_reference["url"] = item["annLink"]
@@ -240,13 +268,14 @@ class DepConnector:
             )
         if item.get("annTitle"):
             external_reference["description"] = item["annTitle"]
-
         return self.helper.api.incident.create(
             name=incident_name,
+            createdBy=self.organization["id"],
             description=description,
             first_seen=first_seen,
             created=first_seen,
-            confidence=self.helper.connect_confidence_level,
+            confidence=self.confidence,
+            objectLabel=self.digintlab_label["id"],
             external_references=[external_reference],
         )
 
@@ -262,10 +291,13 @@ class DepConnector:
             return None
         return self.helper.api.indicator.create(
             name=f"Domain associated with {item.get('victim', 'unknown victim')}",
+            createdBy=self.organization["id"],
+            objectLabel=self.digintlab_label["id"],
             description="Victim domain",
             pattern_type="stix",
             pattern=f"[domain-name:value = '{domain}']",
-            confidence=self.helper.connect_confidence_level,
+            x_opencti_main_observable_type="Domain-Name",
+            confidence=self.confidence,
             valid_from=datetime.now(UTC).isoformat(),
         )
 
@@ -284,9 +316,12 @@ class DepConnector:
         return self.helper.api.indicator.create(
             name=f"Announcement hash for {item.get('victim', 'unknown victim')}",
             description="Hash identifier for tracking",
+            createdBy=self.organization["id"],
+            objectLabel=self.digintlab_label["id"],
             pattern_type="stix",
             pattern=f"[file:hashes.'{hash_type}' = '{hash_value}']",
-            confidence=self.helper.connect_confidence_level,
+            x_opencti_main_observable_type="File",
+            confidence=self.confidence,
             valid_from=datetime.now(UTC).isoformat(),
         )
 
@@ -300,7 +335,18 @@ class DepConnector:
             return None
         try:
             result = self.helper.api.location.read(
-                filters=[{"key": "x_opencti_aliases", "values": [country]}]
+                filters={
+                    "mode": "and",
+                    "filters": [
+                        {
+                            "key": "x_opencti_aliases",
+                            "values": [country],
+                            "operator": "match",
+                            "mode": "or",
+                        }
+                    ],
+                    "filterGroups": [],
+                }
             )
             if result:
                 return str(result.get("id"))
@@ -319,20 +365,27 @@ class DepConnector:
         if not incident:
             return
         incident_id = incident.get("id")
+        if not incident_id:
+            self.helper.log_warning("Skipping relationships: incident has no id")
+            return
         if victim:
             self.helper.api.stix_core_relationship.create(
                 relationship_type="targets",
-                source_ref=incident_id,
-                target_ref=victim["id"],
-                confidence=self.helper.connect_confidence_level,
+                fromId=incident_id,
+                toId=victim["id"],
+                confidence=self.confidence,
+                objectLabel=self.digintlab_label["id"],
+                createdBy=self.organization["id"],
             )
         for indicator in indicators:
             try:
                 self.helper.api.stix_core_relationship.create(
                     relationship_type="indicates",
-                    source_ref=indicator["id"],
-                    target_ref=incident_id,
-                    confidence=self.helper.connect_confidence_level,
+                    fromId=indicator["id"],
+                    toId=incident_id,
+                    confidence=self.confidence,
+                    objectLabel=self.digintlab_label["id"],
+                    createdBy=self.organization["id"],
                 )
             except Exception as error:  # pylint: disable=broad-except
                 self.helper.log_warning(
@@ -343,7 +396,7 @@ class DepConnector:
         victim = self._create_victim_identity(item)
         # Intrusion set creation is intentionally disabled because datasets may
         # include non-adversarial actors.
-        incident = self._create_incident(item, victim)
+        incident = self._create_incident(item)
 
         indicators: list[dict[str, Any]] = []
         site_indicator = self._create_site_indicator(item)
@@ -356,20 +409,17 @@ class DepConnector:
         self._link_entities(victim, incident, indicators)
 
     def _run_cycle(self) -> None:
-        current_state = self.helper.get_state() or {}
-        last_run_str = current_state.get("last_run")
+        current_state = self.helper.get_state()
         now = datetime.now(UTC)
-        if last_run_str:
-            try:
-                start = datetime.fromisoformat(last_run_str)
-            except ValueError:
-                start = now - timedelta(days=self.lookback_days)
-        else:
+        try:
+            start = datetime.fromisoformat(current_state.get("last_run"))
+        except Exception:
             start = now - timedelta(days=self.lookback_days)
+        start = now - timedelta(days=self.lookback_days)
         end = now
 
         self.helper.log_info(
-            f"Fetching DEP data from {start.date().isoformat()} to {end.date().isoformat()}"
+            f"Fetching DEP data from {start.isoformat()} to {end.isoformat()}"
         )
 
         try:
