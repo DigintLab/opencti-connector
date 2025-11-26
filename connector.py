@@ -130,6 +130,7 @@ class DepConnector:
             "ts": start.strftime("%Y-%m-%d"),
             "te": end.strftime("%Y-%m-%d"),
             "dset": self.dataset,
+            "full": True,
         }
         if self.extended_results:
             params["extended"] = "true"
@@ -225,7 +226,8 @@ class DepConnector:
         announcement_date = item.get("date")
         first_seen = None
         if announcement_date:
-            cleaned = announcement_date.strip().rstrip("Zz")  # drop trailing dot/“Z”
+            cleaned = announcement_date.strip().rstrip("Zz")
+
             parsed = None
             for fmt in (
                 "%Y-%m-%d",
@@ -234,10 +236,11 @@ class DepConnector:
                 "%Y-%m-%dT%H:%M:%S.%f",
             ):
                 try:
-                    parsed = datetime.strptime(cleaned, fmt)
+                    parsed = datetime.strptime(cleaned, fmt)  # noqa: DTZ007
                     break
                 except ValueError:
                     continue
+
             if parsed:
                 first_seen = parsed.replace(tzinfo=UTC).isoformat()
             else:
@@ -278,6 +281,7 @@ class DepConnector:
             description="Victim domain",
             pattern_type="stix",
             pattern=f"[domain-name:value = '{domain}']",
+            x_opencti_main_observable_type="Domain-Name",
             confidence=self.helper.connect_confidence_level,
             valid_from=datetime.now(UTC).isoformat(),
         )
@@ -299,6 +303,7 @@ class DepConnector:
             description="Hash identifier for tracking",
             pattern_type="stix",
             pattern=f"[file:hashes.'{hash_type}' = '{hash_value}']",
+            x_opencti_main_observable_type="File",
             confidence=self.helper.connect_confidence_level,
             valid_from=datetime.now(UTC).isoformat(),
         )
@@ -313,7 +318,18 @@ class DepConnector:
             return None
         try:
             result = self.helper.api.location.read(
-                filters=[{"key": "x_opencti_aliases", "values": [country]}]
+                filters={
+                    "mode": "and",
+                    "filters": [
+                        {
+                            "key": "x_opencti_aliases",
+                            "values": [country],
+                            "operator": "match",
+                            "mode": "or",
+                        }
+                    ],
+                    "filterGroups": [],
+                }
             )
             if result:
                 return str(result.get("id"))
@@ -372,20 +388,16 @@ class DepConnector:
         self._link_entities(victim, incident, indicators)
 
     def _run_cycle(self) -> None:
-        current_state = self.helper.get_state() or {}
-        last_run_str = current_state.get("last_run")
+        current_state = self.helper.get_state()
         now = datetime.now(UTC)
-        if last_run_str:
-            try:
-                start = datetime.fromisoformat(last_run_str)
-            except ValueError:
-                start = now - timedelta(days=self.lookback_days)
-        else:
+        try:
+            start = datetime.fromisoformat(current_state.get("last_run"))
+        except Exception:
             start = now - timedelta(days=self.lookback_days)
         end = now
 
         self.helper.log_info(
-            f"Fetching DEP data from {start.date().isoformat()} to {end.date().isoformat()}"
+            f"Fetching DEP data from {start.isoformat()} to {end.isoformat()}"
         )
 
         try:
