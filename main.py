@@ -18,6 +18,16 @@ class DepConnector:
     def __init__(self) -> None:
         config = self._load_config()
         self.helper = OpenCTIConnectorHelper(config)
+        self.organization = self.helper.api.identity.create(
+            type="Organization",
+            name="DigIntLab",
+            description="We Track and Monitor the Cyber Space",
+            contact_information="https://doubleextortion.com/",
+        )
+        self.digintlab_label = self.helper.api.label.create(
+            value="DigIntLab",
+            color="#730000",
+        )
 
         self.interval = get_config_variable(
             "CONNECTOR_RUN_INTERVAL",
@@ -26,7 +36,6 @@ class DepConnector:
             default=3600,
             isNumber=True,
         )
-
         self.lookback_days = get_config_variable(
             "DEP_LOOKBACK_DAYS",
             ["dep", "lookback_days"],
@@ -35,16 +44,13 @@ class DepConnector:
             isNumber=True,
         )
         self.confidence = get_config_variable(
-            "DEP_CONFIDENCE", ["dep", "confidence"], config
+            "DEP_CONFIDENCE", ["dep", "confidence"], config, default=70, isNumber=True
         )
         self.api_key = get_config_variable("DEP_API_KEY", ["dep", "api_key"], config)
         self.username = get_config_variable("DEP_USERNAME", ["dep", "username"], config)
         self.password = get_config_variable("DEP_PASSWORD", ["dep", "password"], config)
         self.client_id = get_config_variable(
-            "DEP_CLIENT_ID",
-            ["dep", "client_id"],
-            config,
-            default="",
+            "DEP_CLIENT_ID", ["dep", "client_id"], config, default=""
         )
         if not self.client_id:
             error = "DEP client ID must be provided via configuration"
@@ -132,7 +138,7 @@ class DepConnector:
             "ts": start.strftime("%Y-%m-%d"),
             "te": end.strftime("%Y-%m-%d"),
             "dset": self.dataset,
-            "full": True,
+            "full": "true",
         }
         if self.extended_results:
             params["extended"] = "true"
@@ -198,11 +204,13 @@ class DepConnector:
 
         return self.helper.api.identity.create(
             type="Organization",
+            createdBy=self.organization["id"],
             name=victim_name,
             description=description,
             confidence=self.confidence,
             external_references=external_references,
             x_opencti_location=location_id,
+            objectLabel=self.digintlab_label["id"],
         )
 
     def _create_intrusion_set(self, item: dict[str, Any]) -> dict[str, Any] | None:
@@ -211,8 +219,10 @@ class DepConnector:
             return None
         return self.helper.api.intrusion_set.create(
             name=actor_name,
+            createdBy=self.organization["id"],
             description="Threat actor",
             aliases=[actor_name],
+            objectLabel=self.digintlab_label["id"],
             confidence=self.confidence,
         )
 
@@ -229,7 +239,6 @@ class DepConnector:
         first_seen = None
         if announcement_date:
             cleaned = announcement_date.strip().rstrip("Zz")
-
             parsed = None
             for fmt in (
                 "%Y-%m-%d",
@@ -261,10 +270,12 @@ class DepConnector:
             external_reference["description"] = item["annTitle"]
         return self.helper.api.incident.create(
             name=incident_name,
+            createdBy=self.organization["id"],
             description=description,
             first_seen=first_seen,
             created=first_seen,
             confidence=self.confidence,
+            objectLabel=self.digintlab_label["id"],
             external_references=[external_reference],
         )
 
@@ -280,6 +291,8 @@ class DepConnector:
             return None
         return self.helper.api.indicator.create(
             name=f"Domain associated with {item.get('victim', 'unknown victim')}",
+            createdBy=self.organization["id"],
+            objectLabel=self.digintlab_label["id"],
             description="Victim domain",
             pattern_type="stix",
             pattern=f"[domain-name:value = '{domain}']",
@@ -303,6 +316,8 @@ class DepConnector:
         return self.helper.api.indicator.create(
             name=f"Announcement hash for {item.get('victim', 'unknown victim')}",
             description="Hash identifier for tracking",
+            createdBy=self.organization["id"],
+            objectLabel=self.digintlab_label["id"],
             pattern_type="stix",
             pattern=f"[file:hashes.'{hash_type}' = '{hash_value}']",
             x_opencti_main_observable_type="File",
@@ -359,6 +374,8 @@ class DepConnector:
                 fromId=incident_id,
                 toId=victim["id"],
                 confidence=self.confidence,
+                objectLabel=self.digintlab_label["id"],
+                createdBy=self.organization["id"],
             )
         for indicator in indicators:
             try:
@@ -367,6 +384,8 @@ class DepConnector:
                     fromId=indicator["id"],
                     toId=incident_id,
                     confidence=self.confidence,
+                    objectLabel=self.digintlab_label["id"],
+                    createdBy=self.organization["id"],
                 )
             except Exception as error:  # pylint: disable=broad-except
                 self.helper.log_warning(
@@ -396,6 +415,7 @@ class DepConnector:
             start = datetime.fromisoformat(current_state.get("last_run"))
         except Exception:
             start = now - timedelta(days=self.lookback_days)
+        start = now - timedelta(days=self.lookback_days)
         end = now
 
         self.helper.log_info(
