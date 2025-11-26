@@ -5,13 +5,7 @@ description = "The Double Extortion connector ingests ransomware and data leak a
 authors = [{ name = "Luca Mella", email = "lm@digintlab.com" }]
 requires-python = ">=3.11"
 readme = "README.md"
-dependencies = [
-    "pycti>=6.8.13",
-    "pyyaml>=6.0.3",
-    "requests>=2.32.5",
-    "types-pyyaml>=6.0.12.20250915",
-    "types-requests>=2.32.4.20250913",
-]
+dependencies = ["pycti>=6.8.13", "pyyaml>=6.0.3", "requests>=2.32.5"]
 
 [project.urls]
 Homepage = "https://github.com/DigintLab/opencti-connector"
@@ -19,7 +13,12 @@ Repository = "https://github.com/DigintLab/opencti-connector"
 Documentation = "https://github.com/DigintLab/opencti-connector/blob/main/README.md"
 
 [dependency-groups]
-dev = ["mypy[faster-cache]>=1.17.1", "ruff>=0.12.7", "pydantic>=2.11.7"]
+dev = [
+    "mypy[faster-cache]>=1.17.1",
+    "ruff>=0.12.7",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-requests>=2.32.4.20250913",
+]
 
 [tool.uv]
 package = false

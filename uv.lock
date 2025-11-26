@@ -321,15 +321,14 @@ dependencies = [
     { name = "pycti" },
     { name = "pyyaml" },
     { name = "requests" },
-    { name = "types-pyyaml" },
-    { name = "types-requests" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "mypy", extra = ["faster-cache"] },
-    { name = "pydantic" },
     { name = "ruff" },
+    { name = "types-pyyaml" },
+    { name = "types-requests" },
 ]
 
 [package.metadata]
@@ -337,15 +336,14 @@ requires-dist = [
     { name = "pycti", specifier = ">=6.8.13" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.32.5" },
-    { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
-    { name = "types-requests", specifier = ">=2.32.4.20250913" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", extras = ["faster-cache"], specifier = ">=1.17.1" },
-    { name = "pydantic", specifier = ">=2.11.7" },
     { name = "ruff", specifier = ">=0.12.7" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
+    { name = "types-requests", specifier = ">=2.32.4.20250913" },
 ]
 
 [[package]]

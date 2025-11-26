@@ -34,7 +34,9 @@ class DepConnector:
             default=7,
             isNumber=True,
         )
-
+        self.confidence = get_config_variable(
+            "DEP_CONFIDENCE", ["dep", "confidence"], config
+        )
         self.api_key = get_config_variable("DEP_API_KEY", ["dep", "api_key"], config)
         self.username = get_config_variable("DEP_USERNAME", ["dep", "username"], config)
         self.password = get_config_variable("DEP_PASSWORD", ["dep", "password"], config)
@@ -198,7 +200,7 @@ class DepConnector:
             type="Organization",
             name=victim_name,
             description=description,
-            confidence=self.helper.connect_confidence_level,
+            confidence=self.confidence,
             external_references=external_references,
             x_opencti_location=location_id,
         )
@@ -211,7 +213,7 @@ class DepConnector:
             name=actor_name,
             description="Threat actor",
             aliases=[actor_name],
-            confidence=self.helper.connect_confidence_level,
+            confidence=self.confidence,
         )
 
     def _create_incident(
@@ -262,7 +264,7 @@ class DepConnector:
             description=description,
             first_seen=first_seen,
             created=first_seen,
-            confidence=self.helper.connect_confidence_level,
+            confidence=self.confidence,
             external_references=[external_reference],
         )
 
@@ -282,7 +284,7 @@ class DepConnector:
             pattern_type="stix",
             pattern=f"[domain-name:value = '{domain}']",
             x_opencti_main_observable_type="Domain-Name",
-            confidence=self.helper.connect_confidence_level,
+            confidence=self.confidence,
             valid_from=datetime.now(UTC).isoformat(),
         )
 
@@ -304,7 +306,7 @@ class DepConnector:
             pattern_type="stix",
             pattern=f"[file:hashes.'{hash_type}' = '{hash_value}']",
             x_opencti_main_observable_type="File",
-            confidence=self.helper.connect_confidence_level,
+            confidence=self.confidence,
             valid_from=datetime.now(UTC).isoformat(),
         )
 
@@ -356,7 +358,7 @@ class DepConnector:
                 relationship_type="targets",
                 fromId=incident_id,
                 toId=victim["id"],
-                confidence=self.helper.connect_confidence_level,
+                confidence=self.confidence,
             )
         for indicator in indicators:
             try:
@@ -364,7 +366,7 @@ class DepConnector:
                     relationship_type="indicates",
                     fromId=indicator["id"],
                     toId=incident_id,
-                    confidence=self.helper.connect_confidence_level,
+                    confidence=self.confidence,
                 )
             except Exception as error:  # pylint: disable=broad-except
                 self.helper.log_warning(

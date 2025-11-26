@@ -3,11 +3,10 @@ opencti:
   token: "CHANGE_ME"
 
 connector:
-  id: 5aa1e271-4f0a-4d4e-8d12-1c9c0ea9bde5
+  id: ChangeMe
   type: EXTERNAL_IMPORT
   name: DEP Connector
   scope: incident,identity,indicator
-  confidence: 70
   log_level: info
   interval: 3600
 
@@ -20,6 +19,7 @@ dep:
   password: your_dep_password
   api_key: your_dep_api_key
   client_id: ""
+  confidence: 70
   login_endpoint: https://cognito-idp.eu-west-1.amazonaws.com/
   api_endpoint: https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist
   dset: ext

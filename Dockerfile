@@ -1,10 +1,10 @@
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 HEALTHCHECK NONE
 
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
-    UV_PYTHON=python3.11 \
+    UV_PYTHON=python3.12 \
     UV_NO_PROGRESS=1
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -21,7 +21,7 @@ COPY *.py ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable --no-dev
 
-FROM python:3.11-slim AS runtime
+FROM python:3.12-slim AS runtime
 HEALTHCHECK NONE
 
 ENV PATH="/app/.venv/bin:${PATH}"
@@ -35,4 +35,4 @@ LABEL org.opencontainers.image.source=https://github.com/DigintLab/opencti-conne
 LABEL org.opencontainers.image.description="The Double Extortion connector ingests ransomware and data leak announcements published on the DoubleExtortion platform and converts them into STIX entities inside OpenCTI."
 
 USER app
-ENTRYPOINT ["python", "connector.py"]
+ENTRYPOINT ["python", "main.py"]
