@@ -17,7 +17,7 @@ The Double Extortion connector ingests ransomware and data leak announcements pu
 
 ## Running locally
 
-1. Copy `config_example.yml` to `config.yml` and update it with your DEP credentials and OpenCTI configuration.
+1. Copy `config.yml.sample` to `config.yml` and update it with your DEP credentials and OpenCTI configuration.
 
 2. Copy `.env_example` to `.env` and update it with your OpenCTI configuration.
 
