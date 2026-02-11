@@ -1,7 +1,8 @@
 import json
 import os
 import time
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from datetime import date as dt_date
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -32,7 +33,7 @@ class AnnouncementType(StrEnum):
 
 @dataclass(config=ConfigDict(extra="allow", frozen=True))
 class LeakRecord:
-    date: date
+    date: dt_date
     hashid: str
 
     victim: str | None = None
