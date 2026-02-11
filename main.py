@@ -6,6 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
+from uuid import NAMESPACE_URL, uuid5
 
 import pycti  # type: ignore[import-untyped]
 import requests
@@ -112,6 +113,13 @@ class DepConnector:
             ["dep", "lookback_days"],
             config,
             default=7,
+            isNumber=True,
+        )
+        self.overlap_hours = pycti.get_config_variable(
+            "DEP_OVERLAP_HOURS",
+            ["dep", "overlap_hours"],
+            config,
+            default=72,
             isNumber=True,
         )
         self.confidence = pycti.get_config_variable(
@@ -327,8 +335,10 @@ class DepConnector:
             )
         if item.ann_title:
             external_reference["description"] = item.ann_title
+        # incident_id must be deterministic to allow updates
+        incident_id = f"incident--{uuid5(NAMESPACE_URL, f'dep-announcement:{item.hashid.strip().lower()}')}"
         return stix2.Incident(
-            id=pycti.Incident.generate_id(incident_name, first_seen),
+            id=incident_id,
             name=incident_name,
             description=description,
             created=first_seen,
@@ -466,7 +476,9 @@ class DepConnector:
         last_run = state.get("last_run")
         if isinstance(last_run, str):
             try:
-                start = datetime.fromisoformat(last_run)
+                start = datetime.fromisoformat(last_run) - timedelta(
+                    hours=self.overlap_hours
+                )
             except ValueError:
                 self.helper.log_warning(
                     f"Ignoring invalid last_run state value: {last_run}"
@@ -478,7 +490,9 @@ class DepConnector:
         end = now
 
         self.helper.log_info(
-            f"Fetching DEP data from {start.isoformat()} to {end.isoformat()}"
+            "Fetching DEP data from "
+            f"{start.isoformat()} to {end.isoformat()} "
+            f"(overlap: {self.overlap_hours}h)"
         )
 
         try:
