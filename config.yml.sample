@@ -27,3 +27,4 @@ dep:
   extended_results: true
   enable_site_indicator: true
   enable_hash_indicator: true
+  skip_empty_victim: false
