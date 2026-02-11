@@ -24,7 +24,8 @@ dep:
   api_endpoint: https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist
   dset: ext
   lookback_days: 7
+  overlap_hours: 72
   extended_results: true
   enable_site_indicator: true
   enable_hash_indicator: true
-  skip_empty_victim: false
+  skip_empty_victim: true
