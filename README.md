@@ -54,6 +54,7 @@ All configuration values can be supplied via the `config.yml` file or through en
 | `dep.dset`                  | `DEP_DSET`                  | `ext`                                                     | Dataset to query (for example `ext`, `sanctions`). |
 | `dep.enable_site_indicator` | `DEP_ENABLE_SITE_INDICATOR` | `true`                                                    | Create a domain indicator per victim.              |
 | `dep.enable_hash_indicator` | `DEP_ENABLE_HASH_INDICATOR` | `true`                                                    | Create a hash indicator when a hash is provided.   |
+| `dep.skip_empty_victim`     | `DEP_SKIP_EMPTY_VICTIM`     | `false`                                                   | Skip items where victim is empty, `n/a`, or `none`. |
 
 ## Docker
 
