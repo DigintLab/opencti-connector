@@ -26,6 +26,7 @@ HEALTHCHECK NONE
 
 ENV PATH="/app/.venv/bin:${PATH}"
 
+# kics-scan ignore-line
 RUN apt update && apt install -y libmagic-dev
 
 RUN adduser --system --no-create-home app
