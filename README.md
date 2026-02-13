@@ -42,13 +42,14 @@ All configuration values can be supplied via the `config.yml` file or through en
 | `dep.username`  | `DEP_USERNAME`       | Username for the Double Extortion Platform portal. |
 | `dep.password`  | `DEP_PASSWORD`       | Password for the portal.                           |
 | `dep.api_key`   | `DEP_API_KEY`        | API key issued by the Double Extortion Platform.   |
+| `dep.client_id` | `DEP_CLIENT_ID`      | AWS Cognito App Client ID.                         |
 
 ### Optional values
 
 | YAML path                   | Environment variable        | Default                                                   | Description                                                                         |
 | --------------------------- | --------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `connector.interval`        | `CONNECTOR_RUN_INTERVAL`    | `3600`                                                    | Interval in seconds between executions.                                             |
-| `dep.client_id`             | `DEP_CLIENT_ID`             | `""`                                                      | AWS Cognito App Client ID (required).                                               |
+| `dep.confidence`            | `DEP_CONFIDENCE`            | `70`                                                      | Confidence score attached to generated STIX objects.                                |
 | `dep.login_endpoint`        | `DEP_LOGIN_ENDPOINT`        | `https://cognito-idp.eu-west-1.amazonaws.com/`            | Cognito login endpoint.                                                             |
 | `dep.api_endpoint`          | `DEP_API_ENDPOINT`          | `https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist` | REST endpoint for announcements.                                                    |
 | `dep.lookback_days`         | `DEP_LOOKBACK_DAYS`         | `7`                                                       | Days to look back on the first run.                                                 |
@@ -84,6 +85,7 @@ docker run --rm \
 - The project uses [**go-task**](https://github.com/go-task/task) with a `Taskfile.yml` to streamline common development commands.
 - The project uses [**uv**](https://docs.astral.sh/uv/) as the Python virtual environment and dependency management tool.
 - The connector stores `last_run` in OpenCTI worker state and fetches with an overlap (`DEP_OVERLAP_HOURS`) to catch delayed DEP changes. Delete the state in OpenCTI to force a full backfill window from `DEP_LOOKBACK_DAYS`.
+- Incidents are created with deterministic IDs derived from DEP `hashid`, and bundles are sent with `update=True`, so repeated records update existing incidents instead of creating duplicates.
 - The API occasionally URL-encodes announcement descriptions. The connector automatically decodes the description before sending it to OpenCTI.
 - Intrusion set creation is disabled by default because not every dataset represents a threat actor. If needed, adapt the logic in `DepConnector._process_item`.
 - To reload the new code inside the platform using docker compose run: `docker compose build dep-connector; docker compose up -d dep-connector; docker compose logs -f dep-connector`
