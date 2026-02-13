@@ -8,7 +8,7 @@ jobs:
       contents: read
     uses: notdodo/github-actions/.github/workflows/python-ci.yml@python-ci-v0
     with:
-      working-directory: "."
+      working-directory: '.'
 
   build-docker-image:
     permissions:
@@ -21,4 +21,6 @@ jobs:
     with:
       image: digintlab/opencti-connector
       platforms: linux/amd64, linux/amd64
+      egress-policy-allowlist: >
+        deb.debian.org:443
       push: false
