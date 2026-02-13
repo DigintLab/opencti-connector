@@ -23,4 +23,5 @@ jobs:
       platforms: linux/amd64, linux/amd64
       egress-policy-allowlist: >
         deb.debian.org:443
+        deb.debian.org:80
       push: false
