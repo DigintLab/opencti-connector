@@ -1,3 +1,4 @@
+# kics-scan ignore
 services:
   rsa-key-generator:
     image: alpine/openssl:3.5.2

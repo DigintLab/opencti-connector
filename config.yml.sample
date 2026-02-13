@@ -1,6 +1,6 @@
 opencti:
-  url: http://opencti:8080
-  token: "CHANGE_ME"
+  url: 'http://opencti:8080'
+  token: "ChangeMe"
 
 connector:
   id: ChangeMe
@@ -8,7 +8,7 @@ connector:
   name: DEP Connector
   scope: incident,identity,indicator
   log_level: info
-  interval: 3600
+  interval: 3600 # In seconds
 
 # Connector specific configuration
 # All values can also be provided with environment variables prefixed with
