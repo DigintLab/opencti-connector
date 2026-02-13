@@ -25,4 +25,5 @@ jobs:
         deb.debian.org:443
         deb.debian.org:80
         files.pythonhosted.org:443
+        pypi.org:443
       push: false
