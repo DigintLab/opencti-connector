@@ -42,6 +42,28 @@ jobs:
         files.pythonhosted.org:443
         pypi.org:443
       push: true
+      sign-image: false
     secrets:
       registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
       registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  sign-image:
+    needs: [build-docker-image]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+      - name: Sign and verify
+        env:
+          COSIGN_YES: 'true'
+          IMAGE_REF: ${{ needs.build-docker-image.outputs.image_ref }}
+          CERT_OIDC_ISSUER: https://token.actions.githubusercontent.com
+          CERT_IDENTITY: ${{ format('https://github.com/{0}', github.workflow_ref) }}
+        run: |
+          cosign sign "${IMAGE_REF}"
+          cosign verify \
+            --certificate-identity "${CERT_IDENTITY}" \
+            --certificate-oidc-issuer "${CERT_OIDC_ISSUER}" \
+            "${IMAGE_REF}"
