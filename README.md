@@ -1,13 +1,13 @@
 # Double Extortion OpenCTI Connector
 
-The Double Extortion connector ingests ransomware and data leak announcements published on the DoubleExtortion platform and converts them into STIX entities inside OpenCTI.
+The Double Extortion connector ingests ransomware and data-leak announcements published on the DoubleExtortion platform and converts them into STIX entities in OpenCTI.
 
 <img width="2532" height="1032" alt="dfz" src="https://github.com/user-attachments/assets/3072e3ce-de67-45a7-a88e-58447066096d" />
 
 ## Features
 
 - Authenticates against the DoubleExtortion AWS Cognito identity provider.
-- Collects double extortion announcements and models them as **Incidents**.
+- Collects Double Extortion announcements and models them as **Incidents**.
 - Creates **Organization** identities for victims.
 - Generates optional **Indicators** for advertised victim domains and leak hash identifiers.
 - Adds announcement-type labels to incidents (for example `dep:announcement-type:pii`).
@@ -68,7 +68,7 @@ A Dockerfile is provided to run the connector in a containerized environment. Bu
 docker build -t opencti-connector-dep .
 ```
 
-Then run it by passing the required configuration as environment variables or mounting the updated `config.yml`:
+Then run it by passing the required configuration as environment variables or by mounting an updated `config.yml`:
 
 ```bash
 docker run --rm \
@@ -88,7 +88,7 @@ docker run --rm \
 - Incidents are created with deterministic IDs derived from DEP `hashid`, and bundles are sent with `update=True`, so repeated records update existing incidents instead of creating duplicates.
 - The API occasionally URL-encodes announcement descriptions. The connector automatically decodes the description before sending it to OpenCTI.
 - Intrusion set creation is disabled by default because not every dataset represents a threat actor. If needed, adapt the logic in `DepConnector._process_item`.
-- To reload the new code inside the platform using docker compose run: `docker compose build dep-connector; docker compose up -d dep-connector; docker compose logs -f dep-connector`
+- To reload the connector code in the platform, run: `docker compose build dep-connector; docker compose up -d dep-connector; docker compose logs -f dep-connector`
 
 ## License
 

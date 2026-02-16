@@ -1,8 +1,8 @@
 {
     "title": "DigIntLab DEP",
     "slug": "digintlab-dep",
-    "description": "In a world awash with data, Digital Intelligence Lab focuses on ways to unlock a wealth of insights. With us, you gain the power to pinpoint organizations hit by major cyber assaults, acquiring strategically pivotal intelligence that's invaluable for businesses focused on vigilant risk management.\n\nThe Double Extortion (DE) Platform has curated an array of cutting-edge tools and invaluable insights, meticulously crafted to empower businesses in navigating the ever-evolving cyber threat landscape with confidence and resilience.",
-    "short_description": "Digital Intelligence Lab's Double Extortion Platform tracks and monitors the cyber space to pinpoint organizations hit by major attacks, delivering business cyber intelligence for risk-focused teams.",
+    "description": "In a world awash with data, Digital Intelligence Lab focuses on uncovering meaningful insights. Our platform helps you pinpoint organizations hit by major cyberattacks and gather strategically important intelligence for vigilant risk management.\n\nThe Double Extortion (DE) Platform offers an array of cutting-edge tools and high-value insights, designed to help businesses navigate the ever-evolving cyber threat landscape with confidence and resilience.",
+    "short_description": "Digital Intelligence Lab's Double Extortion Platform tracks and monitors the cyber space to pinpoint organizations hit by major attacks, delivering cyber intelligence for risk-focused teams.",
     "logo": "external-import/digintlab-dep/__metadata__/logo.png",
     "use_cases": [
         "Commercial Threat Intelligence"
