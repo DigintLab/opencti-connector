@@ -54,14 +54,21 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
       - name: Sign and verify
         env:
           COSIGN_YES: 'true'
-          IMAGE_REF: ${{ needs.build-docker-image.outputs.image_ref }}
+          IMAGE_NAME: docker.io/digintlab/opencti-connector
+          IMAGE_DIGEST: ${{ needs.build-docker-image.outputs.image_digest }}
           CERT_OIDC_ISSUER: https://token.actions.githubusercontent.com
           CERT_IDENTITY: ${{ format('https://github.com/{0}', github.workflow_ref) }}
         run: |
+          IMAGE_REF="${IMAGE_NAME}@${IMAGE_DIGEST}"
           cosign sign "${IMAGE_REF}"
           cosign verify \
             --certificate-identity "${CERT_IDENTITY}" \
