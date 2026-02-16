@@ -22,6 +22,7 @@ jobs:
   build-docker-image:
     needs: [infra-scan, python-ci]
     permissions:
+      artifact-metadata: write
       attestations: write
       contents: read
       id-token: write
@@ -40,7 +41,6 @@ jobs:
         deb.debian.org:80
         files.pythonhosted.org:443
         pypi.org:443
-        docker-images-prod.*.r2.cloudflarestorage.com:443
       push: true
     secrets:
       registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
