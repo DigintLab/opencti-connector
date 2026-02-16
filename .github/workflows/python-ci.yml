@@ -31,7 +31,6 @@ jobs:
       security-events: write
     uses: notdodo/github-actions/.github/workflows/docker-build-and-push.yml@docker-build-and-push-v0
     with:
-      sign-image: false
       image: digintlab/opencti-connector
       platforms: linux/amd64, linux/amd64
       egress-policy-allowlist: >
@@ -40,24 +39,3 @@ jobs:
         files.pythonhosted.org:443
         pypi.org:443
       push: false
-
-  sign-image:
-    needs: [build-docker-image]
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
-      - name: Sign and verify
-        env:
-          COSIGN_YES: 'true'
-          IMAGE_REF: ${{ needs.build-docker-image.outputs.image_ref }}
-          CERT_OIDC_ISSUER: https://token.actions.githubusercontent.com
-          CERT_IDENTITY: ${{ format('https://github.com/{0}', github.workflow_ref) }}
-        run: |
-          cosign sign "${IMAGE_REF}"
-          cosign verify \
-            --certificate-identity "${CERT_IDENTITY}" \
-            --certificate-oidc-issuer "${CERT_OIDC_ISSUER}" \
-            "${IMAGE_REF}"
