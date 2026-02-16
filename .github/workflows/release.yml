@@ -67,10 +67,40 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build-docker-image.outputs.image_digest }}
           CERT_OIDC_ISSUER: https://token.actions.githubusercontent.com
           CERT_IDENTITY: ${{ format('https://github.com/{0}', github.workflow_ref) }}
+          SIGNER_WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           IMAGE_REF="${IMAGE_NAME}@${IMAGE_DIGEST}"
-          cosign sign "${IMAGE_REF}"
-          cosign verify \
-            --certificate-identity "${CERT_IDENTITY}" \
-            --certificate-oidc-issuer "${CERT_OIDC_ISSUER}" \
-            "${IMAGE_REF}"
+          # Docker Hub can lag before a newly pushed signature is queryable.
+          for i in 1 2 3; do
+            cosign sign -a signer_workflow_ref="${SIGNER_WORKFLOW_REF}" "${IMAGE_REF}" && break
+            if [ "$i" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((i * 5))
+          done
+      - name: Debug cosign data
+        if: failure()
+        env:
+          IMAGE_NAME: docker.io/digintlab/opencti-connector
+          IMAGE_DIGEST: ${{ needs.build-docker-image.outputs.image_digest }}
+        run: |
+          IMAGE_REF="${IMAGE_NAME}@${IMAGE_DIGEST}"
+          echo "Debug image ref: ${IMAGE_REF}"
+          echo "Cosign tree:"
+          cosign tree "${IMAGE_REF}" || true
+          echo "Cosign verify (unfiltered):"
+          cosign verify "${IMAGE_REF}" || true
+          for i in 1 2 3 4 5; do
+            if cosign verify \
+              -a signer_workflow_ref="${SIGNER_WORKFLOW_REF}" \
+              --certificate-identity "${CERT_IDENTITY}" \
+              --certificate-oidc-issuer "${CERT_OIDC_ISSUER}" \
+              "${IMAGE_REF}"; then
+              exit 0
+            fi
+            if [ "$i" -eq 5 ]; then
+              echo "Verification failed after retries"
+              exit 1
+            fi
+            sleep $((i * 5))
+          done
