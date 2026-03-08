@@ -9,6 +9,9 @@ The Double Extortion connector ingests ransomware and data-leak announcements pu
 - Authenticates against the DoubleExtortion AWS Cognito identity provider.
 - Collects Double Extortion announcements and models them as **Incidents**.
 - Creates **Organization** identities for victims.
+- Optionally materializes **Intrusion Sets** from DEP actor names.
+- Optionally materializes **Country** locations and links victims to them.
+- Automatically links intrusion sets to sectors and sectors to countries when those entities are created.
 - Generates optional **Indicators** for advertised victim domains and leak hash identifiers.
 - Adds announcement-type labels to incidents (for example `dep:announcement-type:pii`).
 - Supports querying different Double Extortion Platform datasets via `DEP_DSET`.
@@ -60,6 +63,19 @@ All configuration values can be supplied via the `config.yml` file or through en
 | `dep.enable_hash_indicator` | `DEP_ENABLE_HASH_INDICATOR` | `true`                                                    | Create a hash indicator when a hash is provided.                                    |
 | `dep.skip_empty_victim`     | `DEP_SKIP_EMPTY_VICTIM`     | `true`                                                    | Skip items where victim is empty, `n/a`, or `none`.                                 |
 | `dep.create_sector_identities` | `DEP_CREATE_SECTOR_IDENTITIES` | `true`                                                | Create sector identities and link victims with a `part-of` relationship.            |
+| `dep.create_intrusion_sets` | `DEP_CREATE_INTRUSION_SETS` | `true`                                                    | Create intrusion sets from DEP actor values and link incidents with `attributed-to`. |
+| `dep.create_country_locations` | `DEP_CREATE_COUNTRY_LOCATIONS` | `true`                                              | Create country locations and link victim identities with `located-at`.               |
+
+## Why `IntrusionSet` for DEP actor values
+
+DEP `actor` values are modeled as STIX `IntrusionSet` objects instead of `ThreatActor` by default.
+
+- DEP actor strings usually represent campaign/operator labels, not high-confidence real-world identities.
+- `IntrusionSet` is a safer semantic fit for recurring malicious activity clusters.
+- This avoids over-claiming attribution when source data quality is limited.
+- It supports incident and targeting analysis directly through `attributed-to` (incident -> intrusion set) and `targets` (intrusion set -> sector).
+
+A `ThreatActor` model can be adopted later if the feed includes stronger attribution context (persona, role, motivation, sophistication).
 
 ## Docker
 
@@ -89,7 +105,10 @@ docker run --rm \
 - Incidents are created with deterministic IDs derived from DEP `hashid`, and bundles are sent with `update=True`, so repeated records update existing incidents instead of creating duplicates.
 - Sector names are normalized before sector-identity generation to reduce duplicates caused by inconsistent casing or whitespace in DEP data.
 - The API occasionally URL-encodes announcement descriptions. The connector automatically decodes the description before sending it to OpenCTI.
-- Intrusion set creation is disabled by default because not every dataset represents a threat actor. If needed, adapt the logic in `DepConnector._process_item`.
+- DEP actor and country values can be materialized as entities using `DEP_CREATE_INTRUSION_SETS` and `DEP_CREATE_COUNTRY_LOCATIONS`.
+- DEP actor and country values are also stored in incident custom properties (`dep_actor`, `dep_country`) for source traceability.
+- Cross-entity links are automatic: intrusion set -> sector (`targets`) and sector -> country (`related-to`) when both entities are present.
+- Generic low-quality actor values (for example `unknown`, `anonymous`, `ransomware group`) are ignored for intrusion-set creation.
 - To reload the connector code in the platform, run: `docker compose build dep-connector; docker compose up -d dep-connector; docker compose logs -f dep-connector`
 
 ## License
