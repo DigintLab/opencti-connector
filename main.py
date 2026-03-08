@@ -86,6 +86,14 @@ class LeakRecord:
             self.site
         )
 
+    @field_validator("sector")
+    @classmethod
+    def normalize_sector(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        normalized = " ".join(v.split()).strip()
+        return normalized or None
+
 
 class DepConnector:
     def __init__(self) -> None:
@@ -185,9 +193,9 @@ class DepConnector:
             config,
             default=True,
         )
-        self.materialize_sectors = pycti.get_config_variable(
-            "DEP_MATERIALIZE_SECTORS",
-            ["dep", "materialize_sectors"],
+        self.create_sector_identities = pycti.get_config_variable(
+            "DEP_CREATE_SECTOR_IDENTITIES",
+            ["dep", "create_sector_identities"],
             config,
             default=True,
         )
@@ -306,7 +314,7 @@ class DepConnector:
             )
 
         description_parts = []
-        if item.sector and not self.materialize_sectors:
+        if item.sector and not self.create_sector_identities:
             description_parts.append(f"Industry sector: {item.sector}")
         if item.revenue:
             description_parts.append(f"Reported revenue: {item.revenue}")
@@ -324,8 +332,9 @@ class DepConnector:
         )
 
     def _create_sector_identity(self, sector: str) -> stix2.Identity:
+        sector_key = sector.lower()
         return stix2.Identity(
-            id=pycti.Identity.generate_id(sector, identity_class="class"),
+            id=pycti.Identity.generate_id(sector_key, identity_class="class"),
             name=sector,
             identity_class="class",
             created_by_ref=self.author_identity,
@@ -474,8 +483,9 @@ class DepConnector:
             indicators.append(hash_indicator)
 
         sector_identity: stix2.Identity | None = None
-        if self.materialize_sectors and item.sector and victim:
-            sector_identity = self._create_sector_identity(item.sector)
+        sector = item.sector
+        if self.create_sector_identities and sector and victim:
+            sector_identity = self._create_sector_identity(sector)
 
         objects: list[stix2._STIXBase21] = [self.author_identity]
         if victim:

@@ -1,6 +1,7 @@
-config.yml
+__pycache__
+.cache
 .env
 .mypy_cache
 .ruff_cache
 .venv
-__pycache__
+config.yml
