@@ -59,6 +59,7 @@ All configuration values can be supplied via the `config.yml` file or through en
 | `dep.enable_site_indicator` | `DEP_ENABLE_SITE_INDICATOR` | `true`                                                    | Create a domain indicator per victim.                                               |
 | `dep.enable_hash_indicator` | `DEP_ENABLE_HASH_INDICATOR` | `true`                                                    | Create a hash indicator when a hash is provided.                                    |
 | `dep.skip_empty_victim`     | `DEP_SKIP_EMPTY_VICTIM`     | `true`                                                    | Skip items where victim is empty, `n/a`, or `none`.                                 |
+| `dep.create_sector_identities` | `DEP_CREATE_SECTOR_IDENTITIES` | `true`                                                | Create sector identities and link victims with a `part-of` relationship.            |
 
 ## Docker
 
@@ -86,6 +87,7 @@ docker run --rm \
 - The project uses [**uv**](https://docs.astral.sh/uv/) as the Python virtual environment and dependency management tool.
 - The connector stores `last_run` in OpenCTI worker state and fetches with an overlap (`DEP_OVERLAP_HOURS`) to catch delayed DEP changes. Delete the state in OpenCTI to force a full backfill window from `DEP_LOOKBACK_DAYS`.
 - Incidents are created with deterministic IDs derived from DEP `hashid`, and bundles are sent with `update=True`, so repeated records update existing incidents instead of creating duplicates.
+- Sector names are normalized before sector-identity generation to reduce duplicates caused by inconsistent casing or whitespace in DEP data.
 - The API occasionally URL-encodes announcement descriptions. The connector automatically decodes the description before sending it to OpenCTI.
 - Intrusion set creation is disabled by default because not every dataset represents a threat actor. If needed, adapt the logic in `DepConnector._process_item`.
 - To reload the connector code in the platform, run: `docker compose build dep-connector; docker compose up -d dep-connector; docker compose logs -f dep-connector`
