@@ -14,7 +14,6 @@ An [OpenCTI](https://github.com/OpenCTI-Platform/OpenCTI) external-import connec
 - Optionally creates **Sector** identities and links victims via a `part-of` relationship
 - Optionally generates **Indicators** for victim domains and leak hash identifiers
 - Attaches announcement-type labels (e.g. `dep:announcement-type:pii`) to incidents
-- Uses deterministic incident IDs (derived from DEP `hashid`) so repeated runs update existing records instead of creating duplicates
 - Maintains connector state with a configurable overlap window to capture late DEP updates
 
 ---
