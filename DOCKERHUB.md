@@ -79,8 +79,6 @@ A full `docker-compose.yml` (including a local OpenCTI stack) is available in th
         - DEP_PASSWORD=${DEP_PASSWORD}
         - DEP_API_KEY=${DEP_API_KEY}
         - DEP_CLIENT_ID=${DEP_CLIENT_ID}
-      depends_on:
-        - opencti
       restart: always
 
 ---
