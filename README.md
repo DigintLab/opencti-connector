@@ -11,7 +11,7 @@ The Double Extortion connector ingests ransomware and data-leak announcements pu
 - Creates **Organization** identities for victims.
 - Optionally materializes **Intrusion Sets** from DEP actor names.
 - Optionally materializes **Country** locations and links victims to them.
-- Automatically links intrusion sets to sectors and sectors to countries when those entities are created.
+- Automatically links intrusion sets to sectors, intrusion sets to countries, and sectors to countries when those entities are created.
 - Generates optional **Indicators** for advertised victim domains and leak hash identifiers.
 - Adds announcement-type labels to incidents (for example `dep:announcement-type:pii`).
 - Supports querying different Double Extortion Platform datasets via `DEP_DSET`.
@@ -73,7 +73,7 @@ DEP `actor` values are modeled as STIX `IntrusionSet` objects instead of `Threat
 - DEP actor strings usually represent campaign/operator labels, not high-confidence real-world identities.
 - `IntrusionSet` is a safer semantic fit for recurring malicious activity clusters.
 - This avoids over-claiming attribution when source data quality is limited.
-- It supports incident and targeting analysis directly through `attributed-to` (incident -> intrusion set) and `targets` (intrusion set -> sector).
+- It supports incident and targeting analysis directly through `attributed-to` (incident -> intrusion set) and `targets` links from intrusion sets to sectors and countries.
 
 A `ThreatActor` model can be adopted later if the feed includes stronger attribution context (persona, role, motivation, sophistication).
 
@@ -107,7 +107,7 @@ docker run --rm \
 - The API occasionally URL-encodes announcement descriptions. The connector automatically decodes the description before sending it to OpenCTI.
 - DEP actor and country values can be materialized as entities using `DEP_CREATE_INTRUSION_SETS` and `DEP_CREATE_COUNTRY_LOCATIONS`.
 - DEP actor and country values are also stored in incident custom properties (`dep_actor`, `dep_country`) for source traceability.
-- Cross-entity links are automatic: intrusion set -> sector (`targets`) and sector -> country (`related-to`) when both entities are present.
+- Cross-entity links are automatic: intrusion set -> sector (`targets`), intrusion set -> country (`targets`), and sector -> country (`related-to`) when both entities are present.
 - Generic low-quality actor values (for example `unknown`, `anonymous`, `ransomware group`) are ignored for intrusion-set creation.
 - To reload the connector code in the platform, run: `docker compose build dep-connector; docker compose up -d dep-connector; docker compose logs -f dep-connector`
 
