@@ -274,7 +274,8 @@ services:
       context: .
       dockerfile: Dockerfile
     depends_on:
-      - opencti
+      opencti:
+        condition: service_healthy
     volumes:
       - ./config.yml:/app/config.yml:ro
 
