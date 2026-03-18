@@ -9,7 +9,7 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 
 - This is an OpenCTI external-import connector for Double Extortion Platform (DEP) announcements.
 - The connector authenticates against DEP AWS Cognito, fetches announcement records from the DEP REST API, converts them to STIX 2.1, and sends bundles to OpenCTI with `update=True`.
-- The connector scope is `incident,identity,indicator`.
+- The connector scope is `report,incident,identity,indicator`.
 - The implementation is concentrated in a single runtime file: `main.py`.
 
 ## Runtime and configuration truths
@@ -54,7 +54,7 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - `sector`, `actor`, and `country` are whitespace-normalized; empty strings, `n/a`, and `none` become `None`.
 - Indicator domain extraction prefers `victimDomain`, then falls back to `site`.
 - Domain normalization uses `urlsplit`, extracts the hostname, and lowercases it.
-- `annDescription` is URL-decoded with `urllib.parse.unquote` before the incident is created.
+- `annDescription` is URL-decoded with `urllib.parse.unquote` before the report or incident is created.
 
 ## Filtering rules
 
@@ -87,7 +87,34 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 
 ## Data model mappings
 
-### Incident
+### Output mode
+
+- Controlled by `DEP_OUTPUT_MODE` (default: `report`).
+- `report` mode: each announcement is wrapped in a STIX `Report` container whose `object_refs` includes all correlated entities and relationships. This is the default and preferred mode for Knowledge Graph analysis.
+- `incident` mode: each announcement is modeled as a standalone STIX `Incident` with explicit relationship edges (`targets`, `attributed-to`, `indicates`).
+
+### Report (default mode)
+
+- One report is created per DEP announcement.
+- The report is always created, even when no victim identity is created.
+- Deterministic report ID is based on normalized DEP `hashid`:
+  - `report--uuid5(NAMESPACE_URL, "dep-announcement:<hashid>")`
+- Report name format:
+  - `DEP announcement - <victim>`
+  - fallback to `victimDomain`
+  - fallback to `Unknown Victim`
+- `published` is derived from the DEP `date` at `00:00:00Z`.
+- `report_types`: `["threat-report"]`
+- Report custom properties (when present):
+  - `dep_actor`
+  - `dep_country`
+- Report labels always include `DigIntLab`, plus one label per announcement type:
+  - `dep:announcement-type:<lowercased enum value>`
+- Report external reference prefers `annLink`; if absent, it falls back to `site`.
+- `annTitle` is attached as the external reference description when present.
+- `object_refs` contains all objects in the bundle (author identity, victim, indicators, intrusion set, country, sector, and all relationships between them).
+
+### Incident (incident mode)
 
 - One incident is created per DEP announcement.
 - The incident is always created, even when no victim identity is created.
@@ -172,9 +199,21 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
   - pattern: `[file:hashes.'<type>' = '<hash>']`
 - Indicator IDs are deterministic because they are generated from the STIX pattern.
 - Indicator `valid_from` uses current UTC processing time, so timestamps are not deterministic even though IDs are.
-- Indicators are linked to incidents, not to victims.
+- In incident mode, indicators are linked to the incident with `indicates`. In report mode, indicators are included in the report's `object_refs` with no separate relationship edge.
 
 ## Relationships emitted
+
+### In report mode (default)
+
+- `victim -> sector` with `part-of`
+- `victim -> country` with `located-at`
+- `intrusion-set -> sector` with `targets`
+- `intrusion-set -> country` with `targets`
+- `sector -> country` with `related-to`
+
+All of the above, plus the victim, indicators, and intrusion set, are referenced in the Report's `object_refs`. There is no `attributed-to` or `indicates` edge because the Report is a container, not a relationship endpoint.
+
+### In incident mode
 
 - `incident -> victim` with `targets`
 - `victim -> sector` with `part-of`
@@ -198,6 +237,7 @@ These links are created automatically when both related objects exist. There are
   - `DEP_CREATE_INTRUSION_SETS`
   - `DEP_CREATE_COUNTRY_LOCATIONS`
 - Important non-boolean knobs:
+  - `DEP_OUTPUT_MODE` (default: `report`; valid values: `report`, `incident`)
   - `DEP_DSET`
   - `DEP_LOOKBACK_DAYS`
   - `DEP_OVERLAP_HOURS`
@@ -217,7 +257,7 @@ These links are created automatically when both related objects exist. There are
 - Keep optional enrichment behind the existing feature flags.
 - Do not reintroduce removed compatibility flags for cross-entity relationships.
 - If you change modeling, update `README.md`, `config.yml.sample`, and `AGENTS.md` together.
-- If you touch incident or indicator generation, verify idempotency assumptions still hold under `update=True`.
+- If you touch report, incident, or indicator generation, verify idempotency assumptions still hold under `update=True`.
 
 ## Validation and local workflow
 
