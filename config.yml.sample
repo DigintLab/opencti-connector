@@ -32,4 +32,4 @@ dep:
   create_sector_identities: true
   create_intrusion_sets: true
   create_country_locations: true
-  output_mode: report  # "report" (default) or "incident"
+  primary_object: report  # "report" (default) or "incident"

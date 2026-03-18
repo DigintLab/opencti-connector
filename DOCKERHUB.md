@@ -9,11 +9,12 @@ An [OpenCTI](https://github.com/OpenCTI-Platform/OpenCTI) external-import connec
 ## What it does
 
 - Authenticates against the DEP AWS Cognito identity provider
-- Polls the DEP REST API on a configurable interval and maps each announcement to an OpenCTI **Incident**
+- Polls the DEP REST API on a configurable interval and maps each announcement to an OpenCTI **Report** by default, or an **Incident** when `DEP_PRIMARY_OBJECT=incident`
 - Creates **Organization** identities for victim companies
 - Optionally creates **Sector** identities and links victims via a `part-of` relationship
 - Optionally generates **Indicators** for victim domains and leak hash identifiers
-- Attaches announcement-type labels (e.g. `dep:announcement-type:pii`) to incidents
+- Links generated indicators to the victim with `related-to`
+- Attaches announcement-type labels (e.g. `dep:announcement-type:pii`) to the primary object
 - Maintains connector state with a configurable overlap window to capture late DEP updates
 
 ---
@@ -37,31 +38,32 @@ All values can be set via environment variables (which take precedence) or via a
 
 ### Required
 
-| Environment variable | Description |
-|---|---|
-| `OPENCTI_URL` | URL of your OpenCTI platform |
-| `OPENCTI_TOKEN` | OpenCTI API token |
-| `DEP_USERNAME` | DEP portal username |
-| `DEP_PASSWORD` | DEP portal password |
-| `DEP_API_KEY` | API key issued by DEP |
-| `DEP_CLIENT_ID` | AWS Cognito App Client ID |
+| Environment variable | Description                  |
+| -------------------- | ---------------------------- |
+| `OPENCTI_URL`        | URL of your OpenCTI platform |
+| `OPENCTI_TOKEN`      | OpenCTI API token            |
+| `DEP_USERNAME`       | DEP portal username          |
+| `DEP_PASSWORD`       | DEP portal password          |
+| `DEP_API_KEY`        | API key issued by DEP        |
+| `DEP_CLIENT_ID`      | AWS Cognito App Client ID    |
 
 ### Optional
 
-| Environment variable | Default | Description |
-|---|---|---|
-| `CONNECTOR_RUN_INTERVAL` | `3600` | Polling interval in seconds |
-| `DEP_CONFIDENCE` | `70` | Confidence score on generated STIX objects |
-| `DEP_LOOKBACK_DAYS` | `7` | Days to look back on first run |
-| `DEP_OVERLAP_HOURS` | `72` | Overlap hours from previous run to catch late updates |
-| `DEP_DSET` | `ext` | Dataset to query (e.g. `ext`, `sanctions`) |
-| `DEP_EXTENDED_RESULTS` | `true` | Request extended leak information |
-| `DEP_ENABLE_SITE_INDICATOR` | `true` | Create a domain indicator per victim |
-| `DEP_ENABLE_HASH_INDICATOR` | `true` | Create a hash indicator when a hash is provided |
-| `DEP_SKIP_EMPTY_VICTIM` | `true` | Skip items where victim name is empty or n/a |
-| `DEP_CREATE_SECTOR_IDENTITIES` | `true` | Create sector identities and link victims |
-| `DEP_LOGIN_ENDPOINT` | `https://cognito-idp.eu-west-1.amazonaws.com/` | Cognito login endpoint |
-| `DEP_API_ENDPOINT` | `https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist` | DEP REST endpoint |
+| Environment variable           | Default                                                   | Description                                           |
+| ------------------------------ | --------------------------------------------------------- | ----------------------------------------------------- |
+| `CONNECTOR_RUN_INTERVAL`       | `3600`                                                    | Polling interval in seconds                           |
+| `DEP_CONFIDENCE`               | `70`                                                      | Confidence score on generated STIX objects            |
+| `DEP_LOOKBACK_DAYS`            | `7`                                                       | Days to look back on first run                        |
+| `DEP_OVERLAP_HOURS`            | `72`                                                      | Overlap hours from previous run to catch late updates |
+| `DEP_DSET`                     | `ext`                                                     | Dataset to query (e.g. `ext`, `sanctions`)            |
+| `DEP_PRIMARY_OBJECT`           | `report`                                                  | Primary STIX object to emit: `report` or `incident`   |
+| `DEP_EXTENDED_RESULTS`         | `true`                                                    | Request extended leak information                     |
+| `DEP_ENABLE_SITE_INDICATOR`    | `true`                                                    | Create a domain indicator per victim                  |
+| `DEP_ENABLE_HASH_INDICATOR`    | `true`                                                    | Create a hash indicator when a hash is provided       |
+| `DEP_SKIP_EMPTY_VICTIM`        | `true`                                                    | Skip items where victim name is empty or n/a          |
+| `DEP_CREATE_SECTOR_IDENTITIES` | `true`                                                    | Create sector identities and link victims             |
+| `DEP_LOGIN_ENDPOINT`           | `https://cognito-idp.eu-west-1.amazonaws.com/`            | Cognito login endpoint                                |
+| `DEP_API_ENDPOINT`             | `https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist` | DEP REST endpoint                                     |
 
 ---
 

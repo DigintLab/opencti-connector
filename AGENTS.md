@@ -80,18 +80,18 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
   - type: `Identity`
   - identity_class: `organization`
   - contact: `https://doubleextortion.com/`
-- Every emitted object and relationship carries the label `DigIntLab`.
+- Every emitted object and relationship created from DEP content carries the label `DigIntLab`.
 - Confidence is consistently taken from `DEP_CONFIDENCE`.
 - Bundles are deduplicated by STIX ID before sending to OpenCTI.
 - Prefer deterministic IDs for DEP-derived entities and relationships to keep re-imports idempotent.
 
 ## Data model mappings
 
-### Output mode
+### Primary object
 
-- Controlled by `DEP_OUTPUT_MODE` (default: `report`).
-- `report` mode: each announcement is wrapped in a STIX `Report` container whose `object_refs` includes all correlated entities and relationships. This is the default and preferred mode for Knowledge Graph analysis.
-- `incident` mode: each announcement is modeled as a standalone STIX `Incident` with explicit relationship edges (`targets`, `attributed-to`, `indicates`).
+- Controlled by `DEP_PRIMARY_OBJECT` (default: `report`).
+- `report`: each announcement is wrapped in a STIX `Report` container whose `object_refs` includes all correlated entities and relationships. This is the default and preferred mode for Knowledge Graph analysis.
+- `incident`: each announcement is modeled as a standalone STIX `Incident` with explicit relationship edges (`targets`, `attributed-to`, `indicates`).
 
 ### Report (default mode)
 
@@ -199,7 +199,9 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
   - pattern: `[file:hashes.'<type>' = '<hash>']`
 - Indicator IDs are deterministic because they are generated from the STIX pattern.
 - Indicator `valid_from` uses current UTC processing time, so timestamps are not deterministic even though IDs are.
-- In incident mode, indicators are linked to the incident with `indicates`. In report mode, indicators are included in the report's `object_refs` with no separate relationship edge.
+- Indicators are also linked to the victim with `related-to`.
+- In incident mode, indicators are linked to the incident with `indicates`.
+- In report mode, indicators are included in the report's `object_refs` and can also have explicit `related-to -> victim` edges.
 
 ## Relationships emitted
 
@@ -207,11 +209,12 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 
 - `victim -> sector` with `part-of`
 - `victim -> country` with `located-at`
+- `indicator -> victim` with `related-to`
 - `intrusion-set -> sector` with `targets`
 - `intrusion-set -> country` with `targets`
 - `sector -> country` with `related-to`
 
-All of the above, plus the victim, indicators, and intrusion set, are referenced in the Report's `object_refs`. There is no `attributed-to` or `indicates` edge because the Report is a container, not a relationship endpoint.
+All of the above, plus the victim, indicators, and intrusion set, are referenced in the Report's `object_refs`. There is no `attributed-to` edge from the Report itself because the Report is a container, not a relationship endpoint.
 
 ### In incident mode
 
@@ -219,6 +222,7 @@ All of the above, plus the victim, indicators, and intrusion set, are referenced
 - `victim -> sector` with `part-of`
 - `incident -> intrusion-set` with `attributed-to`
 - `victim -> country` with `located-at`
+- `indicator -> victim` with `related-to`
 - `intrusion-set -> sector` with `targets`
 - `intrusion-set -> country` with `targets`
 - `sector -> country` with `related-to`
@@ -237,7 +241,7 @@ These links are created automatically when both related objects exist. There are
   - `DEP_CREATE_INTRUSION_SETS`
   - `DEP_CREATE_COUNTRY_LOCATIONS`
 - Important non-boolean knobs:
-  - `DEP_OUTPUT_MODE` (default: `report`; valid values: `report`, `incident`)
+  - `DEP_PRIMARY_OBJECT` (default: `report`; valid values: `report`, `incident`)
   - `DEP_DSET`
   - `DEP_LOOKBACK_DAYS`
   - `DEP_OVERLAP_HOURS`
@@ -274,16 +278,14 @@ These links are created automatically when both related objects exist. There are
 - Run type checks:
   - `task type-check`
 - Main quality gate:
-  - `task check`
-- Additional syntax check:
-  - `python -m compileall main.py`
+  - `task format check type-check`
 - Docker-based runtime validation can be satisfied by either:
   - building and running the connector image directly
   - using `docker compose up` with the local stack when broader integration checks are needed
 - Never start the connector before the OpenCTI API/platform is ready and reachable.
 - During Docker-based validation, wait for OpenCTI readiness first, then start the connector.
 
-`task check` is the canonical combined gate from `Taskfile.yml` because it runs format check, lint, and mypy.
+Use `task format check type-check` for complete local checks before considering code changes done.
 
 There is a `task test` target, but there is currently no first-party test suite in this repository. Do not assume automated test coverage exists.
 For code changes, do not stop at static checks alone; perform Docker-based runtime validation as well.
