@@ -1,6 +1,5 @@
 import json
 import os
-import time
 from datetime import UTC, datetime, timedelta
 from datetime import date as dt_date
 from enum import StrEnum
@@ -14,7 +13,8 @@ import requests
 import yaml
 from pydantic import ConfigDict, Field, field_validator
 from pydantic.dataclasses import dataclass
-from stix2 import v21 as stix2  # type: ignore[import-untyped]
+from stix2 import TLP_AMBER  # type: ignore[import-untyped]
+from stix2 import v21 as stix2
 
 
 class AnnouncementType(StrEnum):
@@ -130,7 +130,9 @@ class DepConnector:
             description="We Track and Monitor the Cyber Space",
             contact_information="https://doubleextortion.com/",
             identity_class="organization",
+            object_marking_refs=[TLP_AMBER],
         )
+        self._current_work_id: str | None = None
 
         self.interval = pycti.get_config_variable(
             "CONNECTOR_RUN_INTERVAL",
@@ -369,6 +371,7 @@ class DepConnector:
             labels=[self.label_value],
             created_by_ref=self.author_identity,
             external_references=external_references or None,
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _create_sector_identity(self, sector: str) -> stix2.Identity:
@@ -380,6 +383,7 @@ class DepConnector:
             created_by_ref=self.author_identity,
             confidence=self.confidence,
             labels=[self.label_value],
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _create_intrusion_set(self, actor: str) -> stix2.IntrusionSet:
@@ -393,6 +397,7 @@ class DepConnector:
             confidence=self.confidence,
             labels=[self.label_value],
             created_by_ref=self.author_identity,
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _create_country_location(self, country: str) -> stix2.Location:
@@ -405,6 +410,7 @@ class DepConnector:
             confidence=self.confidence,
             labels=[self.label_value],
             created_by_ref=self.author_identity,
+            object_marking_refs=[TLP_AMBER],
             custom_properties={"x_opencti_location_type": "Country"},
             allow_custom=True,
         )
@@ -448,6 +454,7 @@ class DepConnector:
             labels=self._build_labels(item),
             created_by_ref=self.author_identity,
             external_references=[external_reference],
+            object_marking_refs=[TLP_AMBER],
             custom_properties=custom_properties,
         )
 
@@ -489,6 +496,7 @@ class DepConnector:
             "created_by_ref": self.author_identity,
             "external_references": [external_reference],
             "object_refs": object_refs,
+            "object_marking_refs": [TLP_AMBER],
         }
         if custom_properties:
             kwargs["custom_properties"] = custom_properties
@@ -520,6 +528,7 @@ class DepConnector:
             confidence=self.confidence,
             labels=[self.label_value],
             created_by_ref=self.author_identity,
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _create_hash_indicator(self, item: LeakRecord) -> stix2.Indicator | None:
@@ -543,6 +552,7 @@ class DepConnector:
             confidence=self.confidence,
             labels=[self.label_value],
             created_by_ref=self.author_identity,
+            object_marking_refs=[TLP_AMBER],
         )
 
     @staticmethod
@@ -570,6 +580,7 @@ class DepConnector:
             created_by_ref=self.author_identity,
             confidence=self.confidence,
             labels=[self.label_value],
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _send_objects(self, objects: list[stix2._STIXBase21]) -> None:
@@ -577,7 +588,12 @@ class DepConnector:
             return
         deduped = {obj.id: obj for obj in objects if getattr(obj, "id", None)}
         bundle = stix2.Bundle(objects=list(deduped.values()), allow_custom=True)
-        self.helper.send_stix2_bundle(bundle.serialize(), update=True)
+        self.helper.send_stix2_bundle(
+            bundle.serialize(),
+            update=True,
+            work_id=self._current_work_id,
+            cleanup_inconsistent_bundle=True,
+        )
 
     def _should_skip_item(self, victim: str | None) -> bool:
         if not self.skip_empty_victim:
@@ -744,31 +760,43 @@ class DepConnector:
             f"(overlap: {self.overlap_hours}h)"
         )
 
+        self._current_work_id = self.helper.api.work.initiate_work(
+            self.helper.connect_id,
+            f"DEP connector - {now.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+        )
         try:
-            items = self._fetch_data(start, end)
-        except Exception as error:  # pylint: disable=broad-except
-            self.helper.log_error(f"Failed to fetch DEP data: {error}")
-            return
-
-        self.helper.log_info(f"Received {len(items)} entries from DEP API")
-
-        for item in items:
             try:
-                self._process_item(item)
+                items = self._fetch_data(start, end)
             except Exception as error:  # pylint: disable=broad-except
-                self.helper.log_error(
-                    f"Failed to process DEP item for victim {item.victim}: {error}"
-                )
+                self.helper.log_error(f"Failed to fetch DEP data: {error}")
+                return
 
-        self.helper.log_info("Persisting connector state")
-        self.helper.set_state({"last_run": end.isoformat()})
-        self.helper.log_info("DEP run completed")
+            self.helper.log_info(f"Received {len(items)} entries from DEP API")
+
+            for item in items:
+                try:
+                    self._process_item(item)
+                except Exception as error:  # pylint: disable=broad-except
+                    self.helper.log_error(
+                        f"Failed to process DEP item for victim {item.victim}: {error}"
+                    )
+
+            self.helper.log_info("Persisting connector state")
+            self.helper.set_state({"last_run": end.isoformat()})
+            self.helper.log_info("DEP run completed")
+        finally:
+            self.helper.api.work.to_processed(
+                self._current_work_id,
+                f"DEP connector run completed, last_run: {end.isoformat()}",
+            )
+            self._current_work_id = None
 
     def run(self) -> None:
         self.helper.log_info("Starting DEP connector")
-        while True:
-            self._run_cycle()
-            time.sleep(self.interval)
+        self.helper.schedule_iso(
+            message_callback=self._run_cycle,
+            duration_period=f"PT{self.interval}S",
+        )
 
 
 if __name__ == "__main__":
