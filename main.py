@@ -1,6 +1,5 @@
 import json
 import os
-import time
 from datetime import UTC, datetime, timedelta
 from datetime import date as dt_date
 from enum import StrEnum
@@ -14,7 +13,8 @@ import requests
 import yaml
 from pydantic import ConfigDict, Field, field_validator
 from pydantic.dataclasses import dataclass
-from stix2 import v21 as stix2  # type: ignore[import-untyped]
+from stix2 import TLP_AMBER  # type: ignore[import-untyped]
+from stix2 import v21 as stix2
 
 
 class AnnouncementType(StrEnum):
@@ -29,6 +29,11 @@ class AnnouncementType(StrEnum):
     PARTNERS = "PARTNERS"
     PII = "PII"
     SENSITIVES = "SENSITIVES"
+
+
+class PrimaryObject(StrEnum):
+    REPORT = "report"
+    INCIDENT = "incident"
 
 
 @dataclass(config=ConfigDict(extra="allow", frozen=True))
@@ -130,7 +135,9 @@ class DepConnector:
             description="We Track and Monitor the Cyber Space",
             contact_information="https://doubleextortion.com/",
             identity_class="organization",
+            object_marking_refs=[TLP_AMBER],
         )
+        self._current_work_id: str | None = None
 
         self.interval = pycti.get_config_variable(
             "CONNECTOR_RUN_INTERVAL",
@@ -233,6 +240,22 @@ class DepConnector:
             config,
             default=True,
         )
+        primary_object_value = str(
+            pycti.get_config_variable(
+                "DEP_PRIMARY_OBJECT",
+                ["dep", "primary_object"],
+                config,
+                default=PrimaryObject.REPORT.value,
+            )
+        ).strip()
+        try:
+            self.primary_object = PrimaryObject(primary_object_value.lower())
+        except ValueError as exc:
+            error = (
+                "DEP primary object must be one of: report, incident "
+                f"(got: {primary_object_value})"
+            )
+            raise ValueError(error) from exc
 
     @staticmethod
     def _load_config() -> dict[str, Any]:
@@ -363,6 +386,7 @@ class DepConnector:
             labels=[self.label_value],
             created_by_ref=self.author_identity,
             external_references=external_references or None,
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _create_sector_identity(self, sector: str) -> stix2.Identity:
@@ -374,6 +398,7 @@ class DepConnector:
             created_by_ref=self.author_identity,
             confidence=self.confidence,
             labels=[self.label_value],
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _create_intrusion_set(self, actor: str) -> stix2.IntrusionSet:
@@ -387,6 +412,7 @@ class DepConnector:
             confidence=self.confidence,
             labels=[self.label_value],
             created_by_ref=self.author_identity,
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _create_country_location(self, country: str) -> stix2.Location:
@@ -399,20 +425,25 @@ class DepConnector:
             confidence=self.confidence,
             labels=[self.label_value],
             created_by_ref=self.author_identity,
+            object_marking_refs=[TLP_AMBER],
             custom_properties={"x_opencti_location_type": "Country"},
             allow_custom=True,
         )
 
-    def _create_incident(self, item: LeakRecord) -> stix2.Incident:
-        victim_name = item.victim or item.victim_domain
-        if not victim_name:
-            victim_name = "Unknown Victim"
-        incident_name = f"DEP announcement - {victim_name}"
-        description = item.ann_description
-        if description:
-            description = unquote(description)
-        first_seen = datetime.combine(item.date, datetime.min.time(), tzinfo=UTC)
-        external_reference = {"source_name": "dep"}
+    @staticmethod
+    def _build_primary_name(item: LeakRecord) -> str:
+        victim_name = item.victim or item.victim_domain or "Unknown Victim"
+        return f"DEP announcement - {victim_name}"
+
+    @staticmethod
+    def _build_primary_description(item: LeakRecord) -> str | None:
+        if item.ann_description:
+            return unquote(item.ann_description)
+        return None
+
+    @staticmethod
+    def _build_primary_external_reference(item: LeakRecord) -> dict[str, Any]:
+        external_reference: dict[str, Any] = {"source_name": "dep"}
         if item.ann_link:
             external_reference["url"] = item.ann_link
         elif item.site:
@@ -422,16 +453,29 @@ class DepConnector:
             )
         if item.ann_title:
             external_reference["description"] = item.ann_title
-        # incident_id must be deterministic to allow updates
-        incident_id = f"incident--{uuid5(NAMESPACE_URL, f'dep-announcement:{item.hashid.strip().lower()}')}"
-        custom_properties: dict[str, Any] = {
-            "incident_type": "cybercrime",
-            "first_seen": first_seen,
-        }
+        return external_reference
+
+    @staticmethod
+    def _build_primary_custom_properties(item: LeakRecord) -> dict[str, Any]:
+        custom_properties: dict[str, Any] = {}
         if item.actor:
             custom_properties["dep_actor"] = item.actor
         if item.country:
             custom_properties["dep_country"] = item.country
+        return custom_properties
+
+    def _create_incident(self, item: LeakRecord) -> stix2.Incident:
+        incident_name = self._build_primary_name(item)
+        description = self._build_primary_description(item)
+        first_seen = datetime.combine(item.date, datetime.min.time(), tzinfo=UTC)
+        external_reference = self._build_primary_external_reference(item)
+        # incident_id must be deterministic to allow updates
+        incident_id = f"incident--{uuid5(NAMESPACE_URL, f'dep-announcement:{item.hashid.strip().lower()}')}"
+        custom_properties = {
+            "incident_type": "cybercrime",
+            "first_seen": first_seen,
+            **self._build_primary_custom_properties(item),
+        }
 
         return stix2.Incident(
             id=incident_id,
@@ -439,13 +483,40 @@ class DepConnector:
             description=description,
             created=first_seen,
             confidence=self.confidence,
-            labels=self._build_incident_labels(item),
+            labels=self._build_labels(item),
             created_by_ref=self.author_identity,
             external_references=[external_reference],
+            object_marking_refs=[TLP_AMBER],
             custom_properties=custom_properties,
         )
 
-    def _build_incident_labels(self, item: LeakRecord) -> list[str]:
+    def _create_report(self, item: LeakRecord, object_refs: list[str]) -> stix2.Report:
+        report_name = self._build_primary_name(item)
+        description = self._build_primary_description(item)
+        published = datetime.combine(item.date, datetime.min.time(), tzinfo=UTC)
+        external_reference = self._build_primary_external_reference(item)
+        # report_id must be deterministic to allow updates
+        report_id = f"report--{uuid5(NAMESPACE_URL, f'dep-announcement:{item.hashid.strip().lower()}')}"
+        custom_properties = self._build_primary_custom_properties(item)
+
+        kwargs: dict[str, Any] = {
+            "id": report_id,
+            "name": report_name,
+            "description": description,
+            "published": published,
+            "report_types": ["threat-report"],
+            "confidence": self.confidence,
+            "labels": self._build_labels(item),
+            "created_by_ref": self.author_identity,
+            "external_references": [external_reference],
+            "object_refs": object_refs,
+            "object_marking_refs": [TLP_AMBER],
+        }
+        if custom_properties:
+            kwargs["custom_properties"] = custom_properties
+        return stix2.Report(**kwargs)
+
+    def _build_labels(self, item: LeakRecord) -> list[str]:
         labels = {self.label_value}
         labels.update(
             f"dep:announcement-type:{announcement_type.value.lower()}"
@@ -471,6 +542,7 @@ class DepConnector:
             confidence=self.confidence,
             labels=[self.label_value],
             created_by_ref=self.author_identity,
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _create_hash_indicator(self, item: LeakRecord) -> stix2.Indicator | None:
@@ -494,6 +566,7 @@ class DepConnector:
             confidence=self.confidence,
             labels=[self.label_value],
             created_by_ref=self.author_identity,
+            object_marking_refs=[TLP_AMBER],
         )
 
     @staticmethod
@@ -521,6 +594,7 @@ class DepConnector:
             created_by_ref=self.author_identity,
             confidence=self.confidence,
             labels=[self.label_value],
+            object_marking_refs=[TLP_AMBER],
         )
 
     def _send_objects(self, objects: list[stix2._STIXBase21]) -> None:
@@ -528,7 +602,12 @@ class DepConnector:
             return
         deduped = {obj.id: obj for obj in objects if getattr(obj, "id", None)}
         bundle = stix2.Bundle(objects=list(deduped.values()), allow_custom=True)
-        self.helper.send_stix2_bundle(bundle.serialize(), update=True)
+        self.helper.send_stix2_bundle(
+            bundle.serialize(),
+            update=True,
+            work_id=self._current_work_id,
+            cleanup_inconsistent_bundle=True,
+        )
 
     def _should_skip_item(self, victim: str | None) -> bool:
         if not self.skip_empty_victim:
@@ -546,43 +625,25 @@ class DepConnector:
             indicators.append(hash_indicator)
         return indicators
 
-    def _build_optional_entities(
+    def _build_indicator_victim_relationships(
         self,
-        item: LeakRecord,
+        indicators: list[stix2.Indicator],
         victim: stix2.Identity | None,
-        incident: stix2.Incident,
+    ) -> list[stix2.Relationship]:
+        if victim is None:
+            return []
+        return [
+            self._build_relationship("related-to", indicator.id, victim.id)
+            for indicator in indicators
+        ]
+
+    def _build_cross_entity_relationships(
+        self,
+        intrusion_set: stix2.IntrusionSet | None,
+        sector_identity: stix2.Identity | None,
+        country_location: stix2.Location | None,
     ) -> list[stix2._STIXBase21]:
         objects: list[stix2._STIXBase21] = []
-        sector_identity: stix2.Identity | None = None
-        if self.create_sector_identities and item.sector and victim:
-            sector_identity = self._create_sector_identity(item.sector)
-        if sector_identity and victim:
-            objects.append(sector_identity)
-            objects.append(
-                self._build_relationship("part-of", victim.id, sector_identity.id)
-            )
-
-        intrusion_set: stix2.IntrusionSet | None = None
-        if (
-            self.create_intrusion_sets
-            and item.actor
-            and not self._is_low_quality_actor(item.actor)
-        ):
-            intrusion_set = self._create_intrusion_set(item.actor)
-        if intrusion_set:
-            objects.append(intrusion_set)
-            objects.append(
-                self._build_relationship("attributed-to", incident.id, intrusion_set.id)
-            )
-
-        country_location: stix2.Location | None = None
-        if self.create_country_locations and item.country and victim:
-            country_location = self._create_country_location(item.country)
-        if country_location and victim:
-            objects.append(country_location)
-            objects.append(
-                self._build_relationship("located-at", victim.id, country_location.id)
-            )
         if intrusion_set and sector_identity:
             objects.append(
                 self._build_relationship(
@@ -603,6 +664,68 @@ class DepConnector:
             )
         return objects
 
+    def _build_optional_entities(
+        self,
+        item: LeakRecord,
+        victim: stix2.Identity | None,
+        incident_id: str | None = None,
+    ) -> list[stix2._STIXBase21]:
+        objects: list[stix2._STIXBase21] = []
+        sector_identity: stix2.Identity | None = None
+        if self.create_sector_identities and item.sector and victim:
+            sector_identity = self._create_sector_identity(item.sector)
+        if sector_identity and victim:
+            objects.append(sector_identity)
+            objects.append(
+                self._build_relationship("part-of", victim.id, sector_identity.id)
+            )
+
+        intrusion_set: stix2.IntrusionSet | None = None
+        if (
+            self.create_intrusion_sets
+            and item.actor
+            and not self._is_low_quality_actor(item.actor)
+        ):
+            intrusion_set = self._create_intrusion_set(item.actor)
+        if intrusion_set:
+            objects.append(intrusion_set)
+            if incident_id is not None:
+                objects.append(
+                    self._build_relationship(
+                        "attributed-to", incident_id, intrusion_set.id
+                    )
+                )
+
+        country_location: stix2.Location | None = None
+        if self.create_country_locations and item.country and victim:
+            country_location = self._create_country_location(item.country)
+        if country_location and victim:
+            objects.append(country_location)
+            objects.append(
+                self._build_relationship("located-at", victim.id, country_location.id)
+            )
+        objects.extend(
+            self._build_cross_entity_relationships(
+                intrusion_set, sector_identity, country_location
+            )
+        )
+        return objects
+
+    def _build_content(
+        self,
+        item: LeakRecord,
+        victim: stix2.Identity | None,
+        indicators: list[stix2.Indicator],
+        incident_id: str | None = None,
+    ) -> list[stix2._STIXBase21]:
+        content: list[stix2._STIXBase21] = [self.author_identity]
+        if victim:
+            content.append(victim)
+        content.extend(self._build_optional_entities(item, victim, incident_id))
+        content.extend(indicators)
+        content.extend(self._build_indicator_victim_relationships(indicators, victim))
+        return content
+
     def _process_item(self, item: LeakRecord) -> None:
         if self._should_skip_item(item.victim):
             self.helper.log_info(
@@ -610,22 +733,39 @@ class DepConnector:
             )
             return
         victim = self._create_victim_identity(item)
-        incident = self._create_incident(item)
         indicators = self._build_indicators(item)
+        if self.primary_object is PrimaryObject.INCIDENT:
+            self._process_item_as_incident(item, victim, indicators)
+        else:
+            self._process_item_as_report(item, victim, indicators)
 
-        objects: list[stix2._STIXBase21] = [self.author_identity]
-        if victim:
-            objects.append(victim)
+    def _process_item_as_incident(
+        self,
+        item: LeakRecord,
+        victim: stix2.Identity | None,
+        indicators: list[stix2.Indicator],
+    ) -> None:
+        incident = self._create_incident(item)
+        objects = self._build_content(item, victim, indicators, incident.id)
         objects.append(incident)
         if victim:
             objects.append(self._build_relationship("targets", incident.id, victim.id))
-        objects.extend(self._build_optional_entities(item, victim, incident))
-        for indicator in indicators:
-            objects.append(indicator)
-            objects.append(
-                self._build_relationship("indicates", indicator.id, incident.id)
-            )
+        objects.extend(
+            self._build_relationship("indicates", indicator.id, incident.id)
+            for indicator in indicators
+        )
         self._send_objects(objects)
+
+    def _process_item_as_report(
+        self,
+        item: LeakRecord,
+        victim: stix2.Identity | None,
+        indicators: list[stix2.Indicator],
+    ) -> None:
+        content = self._build_content(item, victim, indicators)
+        object_refs = [obj.id for obj in content if getattr(obj, "id", None)]
+        report = self._create_report(item, object_refs)
+        self._send_objects([*content, report])
 
     def _run_cycle(self) -> None:
         now = datetime.now(UTC)
@@ -653,31 +793,43 @@ class DepConnector:
             f"(overlap: {self.overlap_hours}h)"
         )
 
+        self._current_work_id = self.helper.api.work.initiate_work(
+            self.helper.connect_id,
+            f"DEP connector - {now.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+        )
         try:
-            items = self._fetch_data(start, end)
-        except Exception as error:  # pylint: disable=broad-except
-            self.helper.log_error(f"Failed to fetch DEP data: {error}")
-            return
-
-        self.helper.log_info(f"Received {len(items)} entries from DEP API")
-
-        for item in items:
             try:
-                self._process_item(item)
+                items = self._fetch_data(start, end)
             except Exception as error:  # pylint: disable=broad-except
-                self.helper.log_error(
-                    f"Failed to process DEP item for victim {item.victim}: {error}"
-                )
+                self.helper.log_error(f"Failed to fetch DEP data: {error}")
+                return
 
-        self.helper.log_info("Persisting connector state")
-        self.helper.set_state({"last_run": end.isoformat()})
-        self.helper.log_info("DEP run completed")
+            self.helper.log_info(f"Received {len(items)} entries from DEP API")
+
+            for item in items:
+                try:
+                    self._process_item(item)
+                except Exception as error:  # pylint: disable=broad-except
+                    self.helper.log_error(
+                        f"Failed to process DEP item for victim {item.victim}: {error}"
+                    )
+
+            self.helper.log_info("Persisting connector state")
+            self.helper.set_state({"last_run": end.isoformat()})
+            self.helper.log_info("DEP run completed")
+        finally:
+            self.helper.api.work.to_processed(
+                self._current_work_id,
+                f"DEP connector run completed, last_run: {end.isoformat()}",
+            )
+            self._current_work_id = None
 
     def run(self) -> None:
         self.helper.log_info("Starting DEP connector")
-        while True:
-            self._run_cycle()
-            time.sleep(self.interval)
+        self.helper.schedule_iso(
+            message_callback=self._run_cycle,
+            duration_period=f"PT{self.interval}S",
+        )
 
 
 if __name__ == "__main__":
