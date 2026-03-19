@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pycti  # type: ignore[import-untyped]
+from pydantic import ValidationError
 from stix2 import TLP_AMBER  # type: ignore[import-untyped]
 from stix2 import v21 as stix2
 
@@ -163,10 +164,13 @@ class DepConnector:
         for raw_item in raw_items:
             try:
                 parsed_items.append(LeakRecord(**raw_item))
-            except Exception as error:
+            except ValidationError as error:
+                try:
+                    victim_value = raw_item["victim"]
+                except KeyError:
+                    victim_value = None
                 self.helper.log_warning(
-                    "Skipping invalid DEP item for victim "
-                    f"{raw_item.get('victim')}: {error}"
+                    f"Skipping invalid DEP item for victim {victim_value}: {error}"
                 )
         return parsed_items
 
@@ -353,7 +357,10 @@ class DepConnector:
         now = datetime.now(UTC)
         start = now - timedelta(days=self.lookback_days)
         state = self.helper.get_state() or {}
-        last_run = state.get("last_run")
+        try:
+            last_run = state["last_run"]
+        except KeyError:
+            last_run = None
         if isinstance(last_run, str):
             try:
                 start = datetime.fromisoformat(last_run) - timedelta(

@@ -1,10 +1,14 @@
 import json
 import logging
-from typing import Any
+from typing import TypeAlias
 
 import requests
 
 logger = logging.getLogger(__name__)
+
+JsonPrimitive: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
+DepApiItem: TypeAlias = dict[str, JsonValue]
 
 
 class DepClient:
@@ -46,19 +50,18 @@ class DepClient:
             timeout=30,
         )
         response.raise_for_status()
-        data = response.json()
-        try:
-            token = str(data.get("AuthenticationResult").get("IdToken"))
-        except Exception as e:
+        auth_payload: dict[str, dict[str, str]] = response.json()
+        token = auth_payload["AuthenticationResult"]["IdToken"]
+        if not token:
             error = "Unable to retrieve IdToken from authentication response"
-            raise ValueError(error) from e
+            raise ValueError(error)
         return token
 
     def fetch_raw(
         self,
         start_date: str,
         end_date: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[DepApiItem]:
         token = self.authenticate()
         params: dict[str, str] = {
             "ts": start_date,
@@ -82,23 +85,8 @@ class DepClient:
         )
         response.raise_for_status()
         try:
-            data = response.json()
+            payload: list[DepApiItem] = response.json()
         except json.JSONDecodeError as exception:
             message = "Unable to decode DEP API response"
             raise ValueError(message) from exception
-
-        if not isinstance(data, list):
-            logger.warning("DEP API returned unexpected payload type")
-            return []
-
-        result: list[dict[str, Any]] = []
-        for index, item in enumerate(data):
-            if isinstance(item, dict):
-                result.append(item)
-            else:
-                logger.warning(
-                    "Skipping DEP item at index %d: expected object, got %s",
-                    index,
-                    type(item).__name__,
-                )
-        return result
+        return payload

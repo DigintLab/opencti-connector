@@ -1,13 +1,11 @@
 from datetime import UTC, datetime
 from datetime import date as dt_date
 from enum import StrEnum
-from typing import Any
 from urllib.parse import unquote, urlsplit
 from uuid import NAMESPACE_URL, uuid5
 
 import pycti  # type: ignore[import-untyped]
-from pydantic import ConfigDict, Field, field_validator
-from pydantic.dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from stix2 import TLP_AMBER  # type: ignore[import-untyped]
 from stix2 import v21 as stix2
 
@@ -31,8 +29,9 @@ class PrimaryObject(StrEnum):
     INCIDENT = "incident"
 
 
-@dataclass(config=ConfigDict(extra="allow", frozen=True))
-class LeakRecord:
+class LeakRecord(BaseModel):
+    model_config = ConfigDict(extra="allow", frozen=True, populate_by_name=True)
+
     date: dt_date
     hashid: str
 
@@ -126,6 +125,32 @@ def _ensure_scheme(url: str) -> str:
     return url if url.startswith("http") else f"https://{url}"
 
 
+def _external_reference(
+    source_name: str,
+    *,
+    url: str | None = None,
+    description: str | None = None,
+) -> dict[str, str]:
+    reference = {"source_name": source_name}
+    if url is not None:
+        reference["url"] = url
+    if description is not None:
+        reference["description"] = description
+    return reference
+
+
+def _primary_custom_properties(
+    actor: str | None,
+    country: str | None,
+) -> dict[str, str]:
+    properties: dict[str, str] = {}
+    if actor is not None:
+        properties["dep_actor"] = actor
+    if country is not None:
+        properties["dep_country"] = country
+    return properties
+
+
 class StixBuilder:
     def __init__(
         self,
@@ -148,21 +173,21 @@ class StixBuilder:
         if not victim_name:
             return None
 
-        external_references: list[dict[str, Any]] = []
+        external_references: list[dict[str, str]] = []
         if item.ann_link:
             external_references.append(
-                {
-                    "source_name": "dep",
-                    "url": item.ann_link,
-                    "description": item.ann_title,
-                }
+                _external_reference(
+                    "dep",
+                    url=item.ann_link,
+                    description=item.ann_title,
+                )
             )
         if item.site and item.site != item.ann_link:
             external_references.append(
-                {
-                    "source_name": "victim-site",
-                    "url": _ensure_scheme(item.site),
-                }
+                _external_reference(
+                    "victim-site",
+                    url=_ensure_scheme(item.site),
+                )
             )
 
         description_parts = []
@@ -256,9 +281,7 @@ class StixBuilder:
         published = datetime.combine(item.date, datetime.min.time(), tzinfo=UTC)
         external_reference = self.build_primary_external_reference(item)
         report_id = f"report--{uuid5(NAMESPACE_URL, f'dep-announcement:{item.normalized_hashid}')}"
-        custom_properties = self.build_primary_custom_properties(item)
-
-        kwargs: dict[str, Any] = {
+        report_kwargs: dict[str, object] = {
             "id": report_id,
             "name": report_name,
             "description": description,
@@ -271,9 +294,10 @@ class StixBuilder:
             "object_refs": object_refs,
             "object_marking_refs": [TLP_AMBER],
         }
+        custom_properties = self.build_primary_custom_properties(item)
         if custom_properties:
-            kwargs["custom_properties"] = custom_properties
-        return stix2.Report(**kwargs)
+            report_kwargs["custom_properties"] = custom_properties
+        return stix2.Report(**report_kwargs)
 
     def build_labels(self, item: LeakRecord) -> list[str]:
         labels = {self.label_value}
@@ -327,7 +351,10 @@ class StixBuilder:
     @staticmethod
     def detect_hash_type(hash_value: str) -> str | None:
         length_to_type = {32: "MD5", 40: "SHA-1", 64: "SHA-256"}
-        return length_to_type.get(len(hash_value))
+        length = len(hash_value)
+        if length in length_to_type:
+            return length_to_type[length]
+        return None
 
     @staticmethod
     def is_low_quality_actor(actor: str) -> bool:
@@ -365,22 +392,16 @@ class StixBuilder:
         return None
 
     @staticmethod
-    def build_primary_external_reference(item: LeakRecord) -> dict[str, Any]:
-        external_reference: dict[str, Any] = {"source_name": "dep"}
-        if item.ann_link:
-            external_reference["url"] = item.ann_link
-        elif item.site:
-            site = item.site
-            external_reference["url"] = _ensure_scheme(site)
-        if item.ann_title:
-            external_reference["description"] = item.ann_title
-        return external_reference
+    def build_primary_external_reference(item: LeakRecord) -> dict[str, str]:
+        url = item.ann_link
+        if url is None and item.site:
+            url = _ensure_scheme(item.site)
+        return _external_reference(
+            "dep",
+            url=url,
+            description=item.ann_title,
+        )
 
     @staticmethod
-    def build_primary_custom_properties(item: LeakRecord) -> dict[str, Any]:
-        custom_properties: dict[str, Any] = {}
-        if item.actor:
-            custom_properties["dep_actor"] = item.actor
-        if item.country:
-            custom_properties["dep_country"] = item.country
-        return custom_properties
+    def build_primary_custom_properties(item: LeakRecord) -> dict[str, str]:
+        return _primary_custom_properties(item.actor, item.country)
