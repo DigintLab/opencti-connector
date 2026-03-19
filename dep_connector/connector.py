@@ -6,8 +6,7 @@ from stix2 import v21 as stix2
 
 from dep_connector.client_api import DepClient
 from dep_connector.config_loader import load_config
-from dep_connector.converter_to_stix import StixBuilder
-from dep_connector.models import LeakRecord, PrimaryObject
+from dep_connector.converter_to_stix import LeakRecord, PrimaryObject, StixBuilder
 
 
 class DepConnector:

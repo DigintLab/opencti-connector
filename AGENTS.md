@@ -10,7 +10,7 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - This is an OpenCTI external-import connector for Double Extortion Platform (DEP) announcements.
 - The connector authenticates against DEP AWS Cognito, fetches announcement records from the DEP REST API, converts them to STIX 2.1, and sends bundles to OpenCTI with `update=True`.
 - The connector scope is `report,incident,identity,indicator`.
-- The implementation is split across the `dep_connector/` package (`models.py`, `converter_to_stix.py`, `client_api.py`, `config_loader.py`, `connector.py`) with `main.py` as the thin entrypoint.
+- The implementation is split across the `dep_connector/` package (`converter_to_stix.py`, `client_api.py`, `config_loader.py`, `connector.py`) with `main.py` as the thin entrypoint.
 
 ## Runtime and configuration truths
 
@@ -293,8 +293,7 @@ For code changes, do not stop at static checks alone; perform Docker-based runti
 ## File map
 
 - Connector entrypoint: `main.py`
-- Data models (enums, LeakRecord): `dep_connector/models.py`
-- STIX converter: `dep_connector/converter_to_stix.py`
+- Data models and STIX converter: `dep_connector/converter_to_stix.py`
 - DEP API client (auth + fetch): `dep_connector/client_api.py`
 - Configuration loader: `dep_connector/config_loader.py`
 - Connector orchestration (run cycle): `dep_connector/connector.py`
