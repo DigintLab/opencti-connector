@@ -18,6 +18,7 @@ RUN --mount=type=cache,target=/root/.cache \
     --no-install-project --no-editable
 COPY pyproject.toml uv.lock ./
 COPY *.py ./
+COPY dep_connector/ dep_connector/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable --no-dev
 
