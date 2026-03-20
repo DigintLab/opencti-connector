@@ -280,24 +280,36 @@ class StixBuilder:
         description = self.build_primary_description(item)
         published = datetime.combine(item.date, datetime.min.time(), tzinfo=UTC)
         external_reference = self.build_primary_external_reference(item)
-        report_id = f"report--{uuid5(NAMESPACE_URL, f'dep-announcement:{item.normalized_hashid}')}"
-        report_kwargs: dict[str, object] = {
-            "id": report_id,
-            "name": report_name,
-            "description": description,
-            "published": published,
-            "report_types": ["threat-report"],
-            "confidence": self.confidence,
-            "labels": self.build_labels(item),
-            "created_by_ref": self.author_identity,
-            "external_references": [external_reference],
-            "object_refs": object_refs,
-            "object_marking_refs": [TLP_AMBER],
-        }
         custom_properties = self.build_primary_custom_properties(item)
+        report_id = pycti.Report.generate_id(name=report_name, published=published)
         if custom_properties:
-            report_kwargs["custom_properties"] = custom_properties
-        return stix2.Report(**report_kwargs)
+            return stix2.Report(
+                id=report_id,
+                name=report_name,
+                description=description,
+                published=published,
+                report_types=["threat-report"],
+                confidence=self.confidence,
+                labels=self.build_labels(item),
+                created_by_ref=self.author_identity,
+                external_references=[external_reference],
+                object_refs=object_refs,
+                object_marking_refs=[TLP_AMBER],
+                custom_properties=custom_properties,
+            )
+        return stix2.Report(
+            id=report_id,
+            name=report_name,
+            description=description,
+            published=published,
+            report_types=["threat-report"],
+            confidence=self.confidence,
+            labels=self.build_labels(item),
+            created_by_ref=self.author_identity,
+            external_references=[external_reference],
+            object_refs=object_refs,
+            object_marking_refs=[TLP_AMBER],
+        )
 
     def build_labels(self, item: LeakRecord) -> list[str]:
         labels = {self.label_value}
