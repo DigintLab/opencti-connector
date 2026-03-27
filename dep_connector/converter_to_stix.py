@@ -281,7 +281,7 @@ class StixBuilder:
         published = datetime.combine(item.date, datetime.min.time(), tzinfo=UTC)
         external_reference = self.build_primary_external_reference(item)
         custom_properties = self.build_primary_custom_properties(item)
-        report_id = pycti.Report.generate_id(name=report_name, published=published)
+        report_id = f"report--{uuid5(NAMESPACE_URL, f'dep-announcement:{item.normalized_hashid}')}"
         if custom_properties:
             return stix2.Report(
                 id=report_id,
