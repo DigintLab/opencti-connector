@@ -2,7 +2,7 @@
 
 The Double Extortion connector ingests ransomware and data-leak announcements published on the DoubleExtortion platform and converts them into STIX entities in OpenCTI.
 
-<img width="2532" height="1032" alt="dfz" src="https://github.com/user-attachments/assets/3072e3ce-de67-45a7-a88e-58447066096d" />
+<img width="2548" height="1274" alt="image" src="https://github.com/user-attachments/assets/02391fb2-3387-4a76-9824-aea18922c351" />
 
 ## Features
 
@@ -18,7 +18,8 @@ The Double Extortion connector ingests ransomware and data-leak announcements pu
 - Maintains connector state with a configurable overlap window to capture late DEP updates.
 - Uses stable identifiers (based on DEP `hashid`) for both reports and incidents so refreshed DEP records update existing objects.
 
-<img width="2551" height="873" alt="Screenshot 2025-11-30 114440" src="https://github.com/user-attachments/assets/39027ed0-f2f4-4175-abdf-6b31ad78ef75" />
+<img width="2552" height="1283" alt="image (1)" src="https://github.com/user-attachments/assets/948b906a-8677-4326-959c-5483e4e14451" />
+<img width="1759" height="1081" alt="image (2)" src="https://github.com/user-attachments/assets/15784093-3899-475a-a4bd-166a2e40c018" />
 
 ## Running locally
 
