@@ -3,5 +3,7 @@ __pycache__
 .env
 .mypy_cache
 .ruff_cache
+.uv_cache
 .venv
 config.yml
+scripts/
