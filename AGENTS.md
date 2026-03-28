@@ -32,15 +32,31 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
   - `dset`
   - `full=true`
 - `extended=true` is sent only when `DEP_EXTENDED_RESULTS=true`.
-- `DEP_DSET` defaults to `ext`, so the connector can query alternate DEP datasets when required.
+- `DEP_DATASETS` defaults to `["ext"]`.
+- Supported official dataset values are:
+  - `ext`
+  - `prv`
+  - `nws`
+  - `vnd`
+  - `dds`
+  - `frm`
+- The connector also accepts long dataset aliases and normalizes them to the API codes:
+  - `extortion` -> `ext`
+  - `privacy` -> `prv`
+  - `opennews` or `news` -> `nws`
+  - `vandalism` -> `vnd`
+  - `ddos` -> `dds`
+  - `forum` -> `frm`
+- The DEP API accepts one `dset` value per request, so the connector loops over configured datasets and issues one request per dataset.
 
 ## State management
 
-- The connector stores only one state key in OpenCTI worker state: `last_run`.
+- The connector stores one per-dataset state map in OpenCTI worker state: `last_run_by_dataset`.
 - First run window: `now - DEP_LOOKBACK_DAYS`.
-- Subsequent run window: `last_run - DEP_OVERLAP_HOURS`.
-- Invalid or non-string `last_run` values are ignored with a warning.
-- State is persisted only after the processing loop finishes: `{"last_run": end.isoformat()}`.
+- Subsequent run window per dataset: `last_run_by_dataset[dataset] - DEP_OVERLAP_HOURS`.
+- Invalid per-dataset `last_run` values are ignored with a warning.
+- State is persisted independently per dataset after that dataset finishes processing: `{"last_run_by_dataset": {"ext": "...", "dds": "..."}}`.
+- Adding a new dataset later starts that dataset from the full lookback window because it has no existing entry in `last_run_by_dataset`.
 - The overlap window is intentional and should be preserved to catch late DEP updates.
 
 ## Input parsing and normalization
@@ -81,6 +97,9 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
   - identity_class: `organization`
   - contact: `https://doubleextortion.com/`
 - Every emitted object and relationship created from DEP content carries the label `DigIntLab`.
+- DEP-derived objects and relationships also carry:
+  - `dep:dataset:<dataset code>` when the source dataset is known
+  - `dep:announcement-type:<lowercased enum value>` when announcement types are present
 - Confidence is consistently taken from `DEP_CONFIDENCE`.
 - Bundles are deduplicated by STIX ID before sending to OpenCTI.
 - Prefer deterministic IDs for DEP-derived entities and relationships to keep re-imports idempotent.
@@ -108,8 +127,9 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - Report custom properties (when present):
   - `dep_actor`
   - `dep_country`
-- Report labels always include `DigIntLab`, plus one label per announcement type:
+- Report labels always include `DigIntLab`, plus any applicable:
   - `dep:announcement-type:<lowercased enum value>`
+  - `dep:dataset:<dataset code>`
 - Report external reference prefers `annLink`; if absent, it falls back to `site`.
 - `annTitle` is attached as the external reference description when present.
 - `object_refs` contains all objects in the bundle (author identity, victim, indicators, intrusion set, country, sector, and all relationships between them).
@@ -130,8 +150,9 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
   - `first_seen`
   - `dep_actor` when present
   - `dep_country` when present
-- Incident labels always include `DigIntLab`, plus one label per announcement type:
+- Incident labels always include `DigIntLab`, plus any applicable:
   - `dep:announcement-type:<lowercased enum value>`
+  - `dep:dataset:<dataset code>`
 - Incident external reference prefers `annLink`; if absent, it falls back to `site`.
 - `annTitle` is attached as the external reference description when present.
 
@@ -242,7 +263,7 @@ These links are created automatically when both related objects exist. There are
   - `DEP_CREATE_COUNTRY_LOCATIONS`
 - Important non-boolean knobs:
   - `DEP_PRIMARY_OBJECT` (default: `report`; valid values: `report`, `incident`)
-  - `DEP_DSET`
+  - `DEP_DATASETS`
   - `DEP_LOOKBACK_DAYS`
   - `DEP_OVERLAP_HOURS`
   - `DEP_CONFIDENCE`
@@ -287,8 +308,13 @@ These links are created automatically when both related objects exist. There are
 
 Use `task format check type-check` for complete local checks before considering code changes done.
 
-There is a `task test` target, but there is currently no first-party test suite in this repository. Do not assume automated test coverage exists.
-For code changes, do not stop at static checks alone; perform Docker-based runtime validation as well.
+There is a first-party pytest suite in `tests/`, and `task test` runs it.
+Current automated coverage focuses on:
+
+- dataset parsing and official dataset validation against `dep-api-spec.json`
+- connector runtime helpers, run-window behavior, and item-processing behavior
+- STIX conversion, deterministic IDs, labels, and normalization helpers
+  For code changes, do not stop at static checks alone; perform Docker-based runtime validation as well.
 
 ## File map
 
