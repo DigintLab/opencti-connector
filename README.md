@@ -13,8 +13,8 @@ The Double Extortion connector ingests ransomware and data-leak announcements pu
 - Optionally materializes **Country** locations and links victims to them.
 - Automatically links intrusion sets to sectors, intrusion sets to countries, and sectors to countries when those entities are created.
 - Generates optional **Indicators** for advertised victim domains and leak hash identifiers.
-- Adds announcement-type labels to reports or incidents (for example `dep:announcement-type:pii`).
-- Supports querying different Double Extortion Platform datasets via `DEP_DSET`.
+- Adds announcement-type and dataset labels across DEP-derived STIX objects (for example `dep:announcement-type:pii` and `dep:dataset:ext`).
+- Supports querying one or more Double Extortion Platform datasets via `DEP_DATASETS`.
 - Maintains connector state with a configurable overlap window to capture late DEP updates.
 - Uses stable identifiers (based on DEP `hashid`) for both reports and incidents so refreshed DEP records update existing objects.
 - Filters low-quality actor values such as `unknown`, `anonymous`, or `ransomware group` before creating intrusion sets.
@@ -52,23 +52,23 @@ All configuration values can be supplied via the `config.yml` file or through en
 
 ### Optional values
 
-| YAML path                      | Environment variable           | Default                                                   | Description                                                                                                             |
-| ------------------------------ | ------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `connector.interval`           | `CONNECTOR_RUN_INTERVAL`       | `3600`                                                    | Interval in seconds between executions.                                                                                 |
-| `dep.confidence`               | `DEP_CONFIDENCE`               | `70`                                                      | Confidence score attached to generated STIX objects.                                                                    |
-| `dep.login_endpoint`           | `DEP_LOGIN_ENDPOINT`           | `https://cognito-idp.eu-west-1.amazonaws.com/`            | Cognito login endpoint.                                                                                                 |
-| `dep.api_endpoint`             | `DEP_API_ENDPOINT`             | `https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist` | REST endpoint for announcements.                                                                                        |
-| `dep.lookback_days`            | `DEP_LOOKBACK_DAYS`            | `7`                                                       | Days to look back on the first run.                                                                                     |
-| `dep.overlap_hours`            | `DEP_OVERLAP_HOURS`            | `72`                                                      | Hours to overlap from the previous `last_run` when fetching, to catch late updates.                                     |
-| `dep.extended_results`         | `DEP_EXTENDED_RESULTS`         | `true`                                                    | Request extended leak information by adding `extended=true` to DEP API requests.                                        |
-| `dep.dset`                     | `DEP_DSET`                     | `ext`                                                     | Dataset to query (for example `ext`, `sanctions`).                                                                      |
-| `dep.enable_site_indicator`    | `DEP_ENABLE_SITE_INDICATOR`    | `true`                                                    | Create a domain indicator per victim.                                                                                   |
-| `dep.enable_hash_indicator`    | `DEP_ENABLE_HASH_INDICATOR`    | `true`                                                    | Create a hash indicator when a hash is provided.                                                                        |
-| `dep.skip_empty_victim`        | `DEP_SKIP_EMPTY_VICTIM`        | `true`                                                    | Skip items where victim is empty, `n/a`, or `none`.                                                                     |
-| `dep.create_sector_identities` | `DEP_CREATE_SECTOR_IDENTITIES` | `true`                                                    | Create sector identities and link victims with a `part-of` relationship.                                                |
-| `dep.create_intrusion_sets`    | `DEP_CREATE_INTRUSION_SETS`    | `true`                                                    | Create intrusion sets from DEP actor values and link incidents with `attributed-to` (incident mode only).               |
-| `dep.primary_object`           | `DEP_PRIMARY_OBJECT`           | `report`                                                  | Primary object: `report` wraps all objects in a STIX Report container; `incident` creates a standalone Incident object. |
-| `dep.create_country_locations` | `DEP_CREATE_COUNTRY_LOCATIONS` | `true`                                                    | Create country locations and link victim identities with `located-at`.                                                  |
+| YAML path                      | Environment variable           | Default                                                   | Description                                                                                                                                                                                                                  |
+| ------------------------------ | ------------------------------ | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connector.interval`           | `CONNECTOR_RUN_INTERVAL`       | `3600`                                                    | Interval in seconds between executions.                                                                                                                                                                                      |
+| `dep.confidence`               | `DEP_CONFIDENCE`               | `70`                                                      | Confidence score attached to generated STIX objects.                                                                                                                                                                         |
+| `dep.login_endpoint`           | `DEP_LOGIN_ENDPOINT`           | `https://cognito-idp.eu-west-1.amazonaws.com/`            | Cognito login endpoint.                                                                                                                                                                                                      |
+| `dep.api_endpoint`             | `DEP_API_ENDPOINT`             | `https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist` | REST endpoint for announcements.                                                                                                                                                                                             |
+| `dep.lookback_days`            | `DEP_LOOKBACK_DAYS`            | `7`                                                       | Days to look back on the first run.                                                                                                                                                                                          |
+| `dep.overlap_hours`            | `DEP_OVERLAP_HOURS`            | `72`                                                      | Hours to overlap from the previous per-dataset `last_run` when fetching, to catch late updates.                                                                                                                              |
+| `dep.extended_results`         | `DEP_EXTENDED_RESULTS`         | `true`                                                    | Request extended leak information by adding `extended=true` to DEP API requests.                                                                                                                                             |
+| `dep.datasets`                 | `DEP_DATASETS`                 | `ext`                                                     | Comma-separated or YAML-list dataset selection. Accepts official API values (`ext`, `prv`, `nws`, `vnd`, `dds`, `frm`) and long aliases such as `extortion`, `privacy`, `opennews`/`news`, `vandalism`, `ddos`, and `forum`. |
+| `dep.enable_site_indicator`    | `DEP_ENABLE_SITE_INDICATOR`    | `true`                                                    | Create a domain indicator per victim.                                                                                                                                                                                        |
+| `dep.enable_hash_indicator`    | `DEP_ENABLE_HASH_INDICATOR`    | `true`                                                    | Create a hash indicator when a hash is provided.                                                                                                                                                                             |
+| `dep.skip_empty_victim`        | `DEP_SKIP_EMPTY_VICTIM`        | `true`                                                    | Skip items where victim is empty, `n/a`, or `none`.                                                                                                                                                                          |
+| `dep.create_sector_identities` | `DEP_CREATE_SECTOR_IDENTITIES` | `true`                                                    | Create sector identities and link victims with a `part-of` relationship.                                                                                                                                                     |
+| `dep.create_intrusion_sets`    | `DEP_CREATE_INTRUSION_SETS`    | `true`                                                    | Create intrusion sets from DEP actor values and link incidents with `attributed-to` (incident mode only).                                                                                                                    |
+| `dep.primary_object`           | `DEP_PRIMARY_OBJECT`           | `report`                                                  | Primary object: `report` wraps all objects in a STIX Report container; `incident` creates a standalone Incident object.                                                                                                      |
+| `dep.create_country_locations` | `DEP_CREATE_COUNTRY_LOCATIONS` | `true`                                                    | Create country locations and link victim identities with `located-at`.                                                                                                                                                       |
 
 ### DEP request behavior
 
@@ -78,6 +78,10 @@ Each DEP fetch sends:
 - `te`
 - `dset`
 - `full=true`
+
+When multiple datasets are configured, the connector loops over them and sends one DEP request per dataset.
+
+Dataset aliases are normalized to the short API codes before requests are sent. For example, `ddos` becomes `dds` and `vandalism` becomes `vnd`.
 
 The connector adds `extended=true` only when `DEP_EXTENDED_RESULTS=true`.
 
@@ -117,7 +121,8 @@ docker run --rm \
 
 - The project uses [**go-task**](https://github.com/go-task/task) with a `Taskfile.yml` to streamline common development commands.
 - The project uses [**uv**](https://docs.astral.sh/uv/) as the Python virtual environment and dependency management tool.
-- The connector stores `last_run` in OpenCTI worker state and fetches with an overlap (`DEP_OVERLAP_HOURS`) to catch delayed DEP changes. Delete the state in OpenCTI to force a full backfill window from `DEP_LOOKBACK_DAYS`.
+- `task test` runs the first-party pytest suite under `tests/`, covering dataset parsing, connector runtime helpers including run-window behavior, and STIX conversion behavior.
+- The connector stores `last_run_by_dataset` in OpenCTI worker state and applies the overlap (`DEP_OVERLAP_HOURS`) independently per dataset. Adding a new dataset later starts that dataset from the full `DEP_LOOKBACK_DAYS` window without affecting the existing ones.
 - Reports and incidents are created with deterministic IDs derived from DEP `hashid`, and bundles are sent with `update=True`, so repeated records update existing objects instead of creating duplicates.
 - In `report` mode each announcement is wrapped in a STIX `Report` object whose `object_refs` contains all correlated entities (victim, indicators, intrusion set, country, sector and their relationships). This produces a pre-correlated Knowledge Graph view directly in OpenCTI, consistent with most other connectors and feeds.
 - In `incident` mode the announcement is modeled as a STIX `Incident` with explicit `targets`, `attributed-to`, and `indicates` relationships.

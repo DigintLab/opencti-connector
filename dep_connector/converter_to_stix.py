@@ -34,6 +34,7 @@ class LeakRecord(BaseModel):
 
     date: dt_date
     hashid: str
+    dep_dataset: str | None = None
 
     victim: str | None = None
     sector: str | None = None
@@ -139,16 +140,31 @@ def _external_reference(
     return reference
 
 
-def _primary_custom_properties(
-    actor: str | None,
-    country: str | None,
-) -> dict[str, str]:
-    properties: dict[str, str] = {}
-    if actor is not None:
-        properties["dep_actor"] = actor
-    if country is not None:
-        properties["dep_country"] = country
-    return properties
+def _primary_stix_id(object_type: str, item: LeakRecord) -> str:
+    return (
+        f"{object_type}--"
+        f"{uuid5(NAMESPACE_URL, f'dep-announcement:{item.normalized_hashid}')}"
+    )
+
+
+def _victim_external_references(item: LeakRecord) -> list[dict[str, str]]:
+    external_references: list[dict[str, str]] = []
+    if item.ann_link:
+        external_references.append(
+            _external_reference(
+                "dep",
+                url=item.ann_link,
+                description=item.ann_title,
+            )
+        )
+    if item.site and item.site != item.ann_link:
+        external_references.append(
+            _external_reference(
+                "victim-site",
+                url=_ensure_scheme(item.site),
+            )
+        )
+    return external_references
 
 
 class StixBuilder:
@@ -163,6 +179,14 @@ class StixBuilder:
         self.confidence = confidence
         self.label_value = label_value
 
+    def _common_object_kwargs(self, item: LeakRecord) -> dict[str, object]:
+        return {
+            "confidence": self.confidence,
+            "labels": self.build_labels(item),
+            "created_by_ref": self.author_identity,
+            "object_marking_refs": [TLP_AMBER],
+        }
+
     def create_victim_identity(
         self,
         item: LeakRecord,
@@ -172,23 +196,6 @@ class StixBuilder:
         victim_name = item.victim
         if not victim_name:
             return None
-
-        external_references: list[dict[str, str]] = []
-        if item.ann_link:
-            external_references.append(
-                _external_reference(
-                    "dep",
-                    url=item.ann_link,
-                    description=item.ann_title,
-                )
-            )
-        if item.site and item.site != item.ann_link:
-            external_references.append(
-                _external_reference(
-                    "victim-site",
-                    url=_ensure_scheme(item.site),
-                )
-            )
 
         description_parts = []
         if item.sector and include_sector_in_description:
@@ -202,26 +209,20 @@ class StixBuilder:
             name=victim_name,
             description=description,
             identity_class="organization",
-            confidence=self.confidence,
-            labels=[self.label_value],
-            created_by_ref=self.author_identity,
-            external_references=external_references or None,
-            object_marking_refs=[TLP_AMBER],
+            external_references=_victim_external_references(item) or None,
+            **self._common_object_kwargs(item),
         )
 
-    def create_sector_identity(self, sector: str) -> stix2.Identity:
+    def create_sector_identity(self, sector: str, item: LeakRecord) -> stix2.Identity:
         sector_key = sector.lower()
         return stix2.Identity(
             id=pycti.Identity.generate_id(sector_key, identity_class="class"),
             name=sector,
             identity_class="class",
-            created_by_ref=self.author_identity,
-            confidence=self.confidence,
-            labels=[self.label_value],
-            object_marking_refs=[TLP_AMBER],
+            **self._common_object_kwargs(item),
         )
 
-    def create_intrusion_set(self, actor: str) -> stix2.IntrusionSet:
+    def create_intrusion_set(self, actor: str, item: LeakRecord) -> stix2.IntrusionSet:
         actor_key = actor.lower()
         intrusion_set_id = (
             f"intrusion-set--{uuid5(NAMESPACE_URL, f'dep-actor:{actor_key}')}"
@@ -229,33 +230,23 @@ class StixBuilder:
         return stix2.IntrusionSet(
             id=intrusion_set_id,
             name=actor,
-            confidence=self.confidence,
-            labels=[self.label_value],
-            created_by_ref=self.author_identity,
-            object_marking_refs=[TLP_AMBER],
+            **self._common_object_kwargs(item),
         )
 
-    def create_country_location(self, country: str) -> stix2.Location:
+    def create_country_location(self, country: str, item: LeakRecord) -> stix2.Location:
         country_key = country.lower()
         location_id = f"location--{uuid5(NAMESPACE_URL, f'dep-country:{country_key}')}"
         return stix2.Location(
             id=location_id,
             name=country,
             country=country,
-            confidence=self.confidence,
-            labels=[self.label_value],
-            created_by_ref=self.author_identity,
-            object_marking_refs=[TLP_AMBER],
             custom_properties={"x_opencti_location_type": "Country"},
             allow_custom=True,
+            **self._common_object_kwargs(item),
         )
 
     def create_incident(self, item: LeakRecord) -> stix2.Incident:
-        incident_name = self.build_primary_name(item)
-        description = self.build_primary_description(item)
         first_seen = datetime.combine(item.date, datetime.min.time(), tzinfo=UTC)
-        external_reference = self.build_primary_external_reference(item)
-        incident_id = f"incident--{uuid5(NAMESPACE_URL, f'dep-announcement:{item.normalized_hashid}')}"
         custom_properties = {
             "incident_type": "cybercrime",
             "first_seen": first_seen,
@@ -263,58 +254,38 @@ class StixBuilder:
         }
 
         return stix2.Incident(
-            id=incident_id,
-            name=incident_name,
-            description=description,
+            id=_primary_stix_id("incident", item),
+            name=self.build_primary_name(item),
+            description=self.build_primary_description(item),
             created=first_seen,
-            confidence=self.confidence,
-            labels=self.build_labels(item),
-            created_by_ref=self.author_identity,
-            external_references=[external_reference],
-            object_marking_refs=[TLP_AMBER],
+            external_references=[self.build_primary_external_reference(item)],
             custom_properties=custom_properties,
+            **self._common_object_kwargs(item),
         )
 
     def create_report(self, item: LeakRecord, object_refs: list[str]) -> stix2.Report:
-        report_name = self.build_primary_name(item)
-        description = self.build_primary_description(item)
         published = datetime.combine(item.date, datetime.min.time(), tzinfo=UTC)
-        external_reference = self.build_primary_external_reference(item)
         custom_properties = self.build_primary_custom_properties(item)
-        report_id = f"report--{uuid5(NAMESPACE_URL, f'dep-announcement:{item.normalized_hashid}')}"
+        report_kwargs = {
+            "id": _primary_stix_id("report", item),
+            "name": self.build_primary_name(item),
+            "description": self.build_primary_description(item),
+            "published": published,
+            "report_types": ["threat-report"],
+            "external_references": [self.build_primary_external_reference(item)],
+            "object_refs": object_refs,
+            **self._common_object_kwargs(item),
+        }
         if custom_properties:
-            return stix2.Report(
-                id=report_id,
-                name=report_name,
-                description=description,
-                published=published,
-                report_types=["threat-report"],
-                confidence=self.confidence,
-                labels=self.build_labels(item),
-                created_by_ref=self.author_identity,
-                external_references=[external_reference],
-                object_refs=object_refs,
-                object_marking_refs=[TLP_AMBER],
-                custom_properties=custom_properties,
-            )
-        return stix2.Report(
-            id=report_id,
-            name=report_name,
-            description=description,
-            published=published,
-            report_types=["threat-report"],
-            confidence=self.confidence,
-            labels=self.build_labels(item),
-            created_by_ref=self.author_identity,
-            external_references=[external_reference],
-            object_refs=object_refs,
-            object_marking_refs=[TLP_AMBER],
-        )
+            report_kwargs["custom_properties"] = custom_properties
+        return stix2.Report(**report_kwargs)
 
     def build_labels(self, item: LeakRecord) -> list[str]:
         labels = {self.label_value}
+        if item.dep_dataset:
+            labels.add(f"dep:dataset:{item.dep_dataset.lower()}")
         labels.update(
-            f"dep:announcement-type:{announcement_type.value.lower()}"
+            f"dep:announcement-type:{announcement_type.lower()}"
             for announcement_type in item.announcement_types
         )
         return sorted(labels)
@@ -325,17 +296,11 @@ class StixBuilder:
             return None
 
         pattern = f"[domain-name:value = '{domain}']"
-        return stix2.Indicator(
-            id=pycti.Indicator.generate_id(pattern),
+        return self._create_indicator(
+            item,
+            pattern=pattern,
             name=f"Domain associated with {item.victim or 'unknown victim'}",
             description="Victim domain",
-            pattern_type="stix",
-            pattern=pattern,
-            valid_from=datetime.now(UTC),
-            confidence=self.confidence,
-            labels=[self.label_value],
-            created_by_ref=self.author_identity,
-            object_marking_refs=[TLP_AMBER],
         )
 
     def create_hash_indicator(self, item: LeakRecord) -> stix2.Indicator | None:
@@ -347,26 +312,34 @@ class StixBuilder:
             return None
 
         pattern = f"[file:hashes.'{hash_type}' = '{hash_value}']"
-        return stix2.Indicator(
-            id=pycti.Indicator.generate_id(pattern),
+        return self._create_indicator(
+            item,
+            pattern=pattern,
             name=f"Announcement hash for {item.victim or 'unknown victim'}",
             description="Hash identifier for tracking",
+        )
+
+    def _create_indicator(
+        self,
+        item: LeakRecord,
+        *,
+        pattern: str,
+        name: str,
+        description: str,
+    ) -> stix2.Indicator:
+        return stix2.Indicator(
+            id=pycti.Indicator.generate_id(pattern),
+            name=name,
+            description=description,
             pattern_type="stix",
             pattern=pattern,
             valid_from=datetime.now(UTC),
-            confidence=self.confidence,
-            labels=[self.label_value],
-            created_by_ref=self.author_identity,
-            object_marking_refs=[TLP_AMBER],
+            **self._common_object_kwargs(item),
         )
 
     @staticmethod
     def detect_hash_type(hash_value: str) -> str | None:
-        length_to_type = {32: "MD5", 40: "SHA-1", 64: "SHA-256"}
-        length = len(hash_value)
-        if length in length_to_type:
-            return length_to_type[length]
-        return None
+        return {32: "MD5", 40: "SHA-1", 64: "SHA-256"}.get(len(hash_value))
 
     @staticmethod
     def is_low_quality_actor(actor: str) -> bool:
@@ -375,6 +348,7 @@ class StixBuilder:
 
     def build_relationship(
         self,
+        item: LeakRecord,
         relationship_type: str,
         source_ref: str,
         target_ref: str,
@@ -386,10 +360,7 @@ class StixBuilder:
             relationship_type=relationship_type,
             source_ref=source_ref,
             target_ref=target_ref,
-            created_by_ref=self.author_identity,
-            confidence=self.confidence,
-            labels=[self.label_value],
-            object_marking_refs=[TLP_AMBER],
+            **self._common_object_kwargs(item),
         )
 
     @staticmethod
@@ -399,21 +370,21 @@ class StixBuilder:
 
     @staticmethod
     def build_primary_description(item: LeakRecord) -> str | None:
-        if item.ann_description:
-            return unquote(item.ann_description)
-        return None
+        return unquote(item.ann_description) if item.ann_description else None
 
     @staticmethod
     def build_primary_external_reference(item: LeakRecord) -> dict[str, str]:
-        url = item.ann_link
-        if url is None and item.site:
-            url = _ensure_scheme(item.site)
         return _external_reference(
             "dep",
-            url=url,
+            url=item.ann_link or (_ensure_scheme(item.site) if item.site else None),
             description=item.ann_title,
         )
 
     @staticmethod
     def build_primary_custom_properties(item: LeakRecord) -> dict[str, str]:
-        return _primary_custom_properties(item.actor, item.country)
+        properties: dict[str, str] = {}
+        if item.actor is not None:
+            properties["dep_actor"] = item.actor
+        if item.country is not None:
+            properties["dep_country"] = item.country
+        return properties

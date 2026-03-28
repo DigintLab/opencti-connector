@@ -23,7 +23,8 @@ dep:
   confidence: 70
   login_endpoint: https://cognito-idp.eu-west-1.amazonaws.com/
   api_endpoint: https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist
-  dset: ext
+  datasets:
+    - ext
   lookback_days: 7
   overlap_hours: 72
   extended_results: true  # Adds extended=true to DEP API requests.
