@@ -26,7 +26,7 @@ The simplest way to run the connector is to mount a `config.yml` file at `/app/c
 ```bash
 docker run --rm \
   -v "$(pwd)/config.yml:/app/config.yml:ro" \
-  opencti/connector-digintlab-dep:rolling
+  digintlab/opencti-connector:latest
 ```
 
 Environment variables override values from `config.yml`. A minimal env-only example is:
@@ -43,7 +43,7 @@ docker run --rm \
   -e DEP_PASSWORD=your-password \
   -e DEP_API_KEY=your-api-key \
   -e DEP_CLIENT_ID=your-cognito-client-id \
-  opencti/connector-digintlab-dep:rolling
+  digintlab/opencti-connector:latest
 ```
 
 ---
@@ -95,22 +95,50 @@ A full `docker-compose.yml` with a local OpenCTI stack is available in the [sour
 
 ```yaml
 dep-connector:
-  image: opencti/connector-digintlab-dep:rolling
+  image: opencti/connector-digintlab-dep:
   restart: always
   volumes:
     - ./config.yml:/app/config.yml:ro
   environment:
     - OPENCTI_URL=http://opencti:8080
     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+    - CONNECTOR_ID=${DEP_CONNECTOR_ID}
+    - CONNECTOR_TYPE=EXTERNAL_IMPORT
+    - CONNECTOR_NAME=DEP Connector
+    - CONNECTOR_SCOPE=report,incident,identity,indicator
+    - CONNECTOR_LOG_LEVEL=info
+    - CONNECTOR_RUN_INTERVAL=3600
     - DEP_USERNAME=${DEP_USERNAME}
     - DEP_PASSWORD=${DEP_PASSWORD}
     - DEP_API_KEY=${DEP_API_KEY}
     - DEP_CLIENT_ID=${DEP_CLIENT_ID}
+    - DEP_CONFIDENCE=70
+    - DEP_LOGIN_ENDPOINT=https://cognito-idp.eu-west-1.amazonaws.com/
+    - DEP_API_ENDPOINT=https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist
+    - DEP_LOOKBACK_DAYS=7
+    - DEP_OVERLAP_HOURS=72
+    - DEP_DATASETS=ext,dds
+    - DEP_PRIMARY_OBJECT=report
+    - DEP_EXTENDED_RESULTS=true
+    - DEP_ENABLE_SITE_INDICATOR=true
+    - DEP_ENABLE_HASH_INDICATOR=true
+    - DEP_SKIP_EMPTY_VICTIM=true
+    - DEP_CREATE_SECTOR_IDENTITIES=true
+    - DEP_CREATE_INTRUSION_SETS=true
+    - DEP_CREATE_COUNTRY_LOCATIONS=true
+```
+
+For published-image usage, replace the `build:` section with:
+
+```yaml
+image: digintlab/opencti-connector:latest
 ```
 
 When multiple datasets are configured, the connector loops over them and issues one DEP API request per dataset. Dataset aliases are normalized to the short API codes before the request is sent, for example `ddos -> dds` and `vandalism -> vnd`.
 
 State is tracked per dataset, so adding a new dataset later starts that dataset from the normal lookback window instead of inheriting the already-advanced state of the previously configured datasets.
+
+The local stack expects OpenCTI to be healthy before the connector starts, and mounts `./config.yml` into `/app/config.yml` for the `dep-connector` service.
 
 ---
 
