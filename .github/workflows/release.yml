@@ -30,6 +30,7 @@ jobs:
       security-events: write
     uses: notdodo/github-actions/.github/workflows/docker-build-and-push.yml@docker-build-and-push-v0
     with:
+      environment: main
       registry: docker.io
       image: digintlab/opencti-connector
       platforms: linux/amd64,linux/arm64
@@ -50,6 +51,7 @@ jobs:
   update-docker-readme:
     needs: [build-docker-image]
     runs-on: ubuntu-latest
+    environment: main
     permissions:
       id-token: write
       contents: read
@@ -68,6 +70,7 @@ jobs:
   sign-image:
     needs: [build-docker-image]
     runs-on: ubuntu-latest
+    environment: main
     permissions:
       id-token: write
       contents: read
