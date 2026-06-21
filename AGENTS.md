@@ -10,7 +10,14 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - This is an OpenCTI external-import connector for Double Extortion Platform (DEP) announcements.
 - The connector authenticates against DEP AWS Cognito, fetches announcement records from the DEP REST API, converts them to STIX 2.1, and sends bundles to OpenCTI with `update=True`.
 - The connector scope is `report,incident,identity,indicator`.
-- The implementation is split across the `dep_connector/` package (`converter_to_stix.py`, `client_api.py`, `config_loader.py`, `connector.py`) with `main.py` as the thin entrypoint.
+- The implementation is split across the `dep_connector/` package:
+  - `connector.py`: run-cycle orchestration and OpenCTI state handling
+  - `client_api.py`: DEP authentication and fetch HTTP calls
+  - `api_models.py`: DEP API/auth response validation models
+  - `datasets.py`: DEP dataset codes, aliases, and validation helpers
+  - `converter_to_stix.py`: DEP record parsing and STIX object construction
+  - `config_loader.py`: YAML configuration loading
+  - `main.py`: thin entrypoint
 
 ## Runtime and configuration truths
 
@@ -319,8 +326,10 @@ Current automated coverage focuses on:
 ## File map
 
 - Connector entrypoint: `main.py`
+- DEP API/auth response validation models: `dep_connector/api_models.py`
 - Data models and STIX converter: `dep_connector/converter_to_stix.py`
 - DEP API client (auth + fetch): `dep_connector/client_api.py`
+- DEP dataset codes and aliases: `dep_connector/datasets.py`
 - Configuration loader: `dep_connector/config_loader.py`
 - Connector orchestration (run cycle): `dep_connector/connector.py`
 - Package re-export: `dep_connector/__init__.py`
