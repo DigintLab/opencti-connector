@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pycti  # type: ignore[import-untyped]
+import pytest
 from stix2 import TLP_AMBER  # type: ignore[import-untyped]
 from stix2 import v21 as stix2
 
@@ -222,3 +223,40 @@ def test_persist_dataset_state_merges_existing_dataset_entries() -> None:
             }
         }
     )
+
+
+def test_run_cycle_marks_work_in_error_when_run_fails() -> None:
+    connector = DepConnector.__new__(DepConnector)
+    connector.helper = Mock()
+    connector.helper.get_state.return_value = {}
+    connector.helper.connect_id = "connector-id"
+    connector.helper.api.work.initiate_work.return_value = "work-id"
+    connector.client = Mock()
+    connector.client.authenticate.side_effect = RuntimeError("auth failed")
+    connector.datasets = (DepDataset.EXTORTION,)
+    connector.overlap_hours = 24
+    connector.lookback_days = 7
+    connector._current_work_id = None
+
+    with pytest.raises(RuntimeError, match="auth failed"):
+        connector._run_cycle()
+
+    connector.helper.log_error.assert_called_once_with(
+        "DEP connector run failed: auth failed"
+    )
+    connector.helper.api.work.to_processed.assert_called_once()
+    assert connector.helper.api.work.to_processed.call_args.args[:2] == (
+        "work-id",
+        "DEP connector run failed: auth failed",
+    )
+    assert connector.helper.api.work.to_processed.call_args.kwargs == {"in_error": True}
+    assert connector._current_work_id is None
+
+
+def test_build_client_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DEP_API_KEY", raising=False)
+    monkeypatch.delenv("DEP_CLIENT_ID", raising=False)
+    connector = DepConnector.__new__(DepConnector)
+
+    with pytest.raises(ValueError, match="API key"):
+        connector._build_client({"dep": {"client_id": "client-123"}})

@@ -417,7 +417,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pycti", specifier = ">=6.8.13" },
+    { name = "pycti", specifier = ">=6.9.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "stix2", specifier = ">=3.0.1" },

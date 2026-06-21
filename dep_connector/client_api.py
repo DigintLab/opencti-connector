@@ -1,49 +1,38 @@
 import json
 import logging
-from enum import StrEnum
-from typing import TypeAlias
+from typing import TypeVar
 
 import requests
+from pydantic import TypeAdapter, ValidationError
+
+from dep_connector.api_models import (
+    COGNITO_AUTH_RESPONSE_ADAPTER,
+    DEP_API_ITEMS_ADAPTER,
+    DepApiItem,
+)
+from dep_connector.datasets import DepDataset
 
 logger = logging.getLogger(__name__)
-
-JsonPrimitive: TypeAlias = str | int | float | bool | None
-JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
-DepApiItem: TypeAlias = dict[str, JsonValue]
+TValidatedPayload = TypeVar("TValidatedPayload")
 
 
-class DepDataset(StrEnum):
-    EXTORTION = "ext"
-    PRIVACY = "prv"
-    OPENNEWS = "nws"
-    VANDALISM = "vnd"
-    DDOS = "dds"
-    FORUM = "frm"
-
-    @classmethod
-    def _missing_(cls, value: object) -> "DepDataset | None":
-        if not isinstance(value, str):
-            return None
-        return DATASET_ALIASES.get(value)
+def _decode_json_response(response: requests.Response, error_message: str) -> object:
+    try:
+        payload: object = response.json()
+    except (json.JSONDecodeError, requests.exceptions.JSONDecodeError) as exception:
+        raise ValueError(error_message) from exception
+    return payload
 
 
-DATASET_ALIASES: dict[str, DepDataset] = {
-    "extortion": DepDataset.EXTORTION,
-    "privacy": DepDataset.PRIVACY,
-    "opennews": DepDataset.OPENNEWS,
-    "news": DepDataset.OPENNEWS,
-    "vandalism": DepDataset.VANDALISM,
-    "ddos": DepDataset.DDOS,
-    "forum": DepDataset.FORUM,
-}
-
-
-def dataset_alias_summary() -> str:
-    aliases_by_dataset: dict[DepDataset, list[str]] = {}
-    for alias, dataset in DATASET_ALIASES.items():
-        aliases_by_dataset.setdefault(dataset, []).append(alias)
-    groups = ["/".join(aliases_by_dataset[dataset]) for dataset in DepDataset]
-    return ", ".join(group for group in groups if group)
+def _validate_payload(
+    adapter: TypeAdapter[TValidatedPayload],
+    payload: object,
+    error_message: str,
+) -> TValidatedPayload:
+    try:
+        return adapter.validate_python(payload)
+    except ValidationError as exception:
+        raise ValueError(error_message) from exception
 
 
 class DepClient:
@@ -83,12 +72,16 @@ class DepClient:
             timeout=30,
         )
         response.raise_for_status()
-        auth_payload: dict[str, dict[str, str]] = response.json()
-        token = auth_payload["AuthenticationResult"]["IdToken"]
-        if not token:
-            error = "Unable to retrieve IdToken from authentication response"
-            raise ValueError(error)
-        return token
+        auth_payload = _decode_json_response(
+            response,
+            "Unable to decode DEP authentication response",
+        )
+        auth_response = _validate_payload(
+            COGNITO_AUTH_RESPONSE_ADAPTER,
+            auth_payload,
+            "Invalid DEP authentication response",
+        )
+        return auth_response.authentication_result.id_token
 
     def fetch_raw(
         self,
@@ -120,9 +113,7 @@ class DepClient:
             timeout=60,
         )
         response.raise_for_status()
-        try:
-            payload: list[DepApiItem] = response.json()
-        except json.JSONDecodeError as exception:
-            message = "Unable to decode DEP API response"
-            raise ValueError(message) from exception
-        return payload
+        payload = _decode_json_response(response, "Unable to decode DEP API response")
+        return _validate_payload(
+            DEP_API_ITEMS_ADAPTER, payload, "Invalid DEP API response"
+        )

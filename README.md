@@ -85,6 +85,8 @@ Dataset aliases are normalized to the short API codes before requests are sent. 
 
 The connector adds `extended=true` only when `DEP_EXTENDED_RESULTS=true`.
 
+> **Limitation — 1000-item response cap.** The DEP API returns at most **1000 items per request** and offers no pagination on this endpoint. If a single per-dataset run window contains more than 1000 announcements, the surplus is silently dropped and is **not** re-fetched on the next run (state advances regardless). Keep each run window under that cap by using a modest `DEP_LOOKBACK_DAYS` and a frequent enough `CONNECTOR_RUN_INTERVAL`, and take care with large first-run backfills or long downtime on busy datasets. As a rough guide observed from the API: ~13 items/day, ~654 over 30 days, and the cap (1000) is reached somewhere beyond a ~2-month window for the `ext` dataset.
+
 ## Why `IntrusionSet` for DEP actor values
 
 DEP `actor` values are modeled as STIX `IntrusionSet` objects instead of `ThreatActor` by default.
@@ -130,7 +132,8 @@ docker run --rm \
 - The API occasionally URL-encodes announcement descriptions. The connector automatically decodes the description before sending it to OpenCTI.
 - DEP `annLink` values are repaired for a known scrape bug (`https//...` or `http//...`) before they are used as external references.
 - DEP actor and country values can be materialized as entities using `DEP_CREATE_INTRUSION_SETS` and `DEP_CREATE_COUNTRY_LOCATIONS`.
-- DEP actor and country values are also stored in the primary object custom properties (`dep_actor`, `dep_country`) for source traceability.
+- Country locations carry the human-readable country name plus the ISO 3166-1 alpha-2 code from DEP `victimCC` (falling back to the name when no valid code is available), as expected by OpenCTI/STIX.
+- DEP actor, country, and NAICS industry code are also stored in the primary object custom properties (`dep_actor`, `dep_country`, `dep_naics`) for source traceability.
 - Generated indicators are also linked to the victim with `related-to` so those indicator nodes are connected in the Knowledge Graph.
 - Cross-entity links are automatic: intrusion set -> sector (`targets`), intrusion set -> country (`targets`), and sector -> country (`related-to`) when both entities are present.
 - Generic low-quality actor values (for example `unknown`, `anonymous`, `ransomware group`) are ignored for intrusion-set creation.

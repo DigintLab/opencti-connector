@@ -10,7 +10,15 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - This is an OpenCTI external-import connector for Double Extortion Platform (DEP) announcements.
 - The connector authenticates against DEP AWS Cognito, fetches announcement records from the DEP REST API, converts them to STIX 2.1, and sends bundles to OpenCTI with `update=True`.
 - The connector scope is `report,incident,identity,indicator`.
-- The implementation is split across the `dep_connector/` package (`converter_to_stix.py`, `client_api.py`, `config_loader.py`, `connector.py`) with `main.py` as the thin entrypoint.
+- The implementation is split across the `dep_connector/` package:
+  - `connector.py`: run-cycle orchestration and OpenCTI state handling
+  - `client_api.py`: DEP authentication and fetch HTTP calls
+  - `api_models.py`: DEP API/auth response validation models
+  - `datasets.py`: DEP dataset codes, aliases, and validation helpers
+  - `converter_to_stix.py`: DEP record parsing and STIX object construction
+  - `stix_objects.py`: shared STIX object protocols and collection helpers
+  - `config_loader.py`: YAML configuration loading
+  - `main.py`: thin entrypoint
 
 ## Runtime and configuration truths
 
@@ -19,8 +27,8 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - `DEP_CLIENT_ID` is required at startup even though `config.yml.sample` leaves it blank. Missing it raises `ValueError`.
 - The runtime loop is infinite: `run()` executes one cycle, then sleeps for `CONNECTOR_RUN_INTERVAL`.
 - Local Docker Compose mounts `./config.yml` into `/app/config.yml` for the `dep-connector` service.
-- The local stack pins OpenCTI services to `6.8.13`; the connector manifest declares support for OpenCTI `>= 6.8.13`.
-- The container image runs `python main.py` as the non-root `app` user on Python 3.12.
+- The local stack pins OpenCTI services to `6.9.0` (tested against latest); the connector manifest declares support for OpenCTI `>= 6.8.13` (no 6.9.0-only platform API is used).
+- The container image runs `python main.py` as the non-root `app` user on Python 3.14.5.
 
 ## DEP fetch behavior
 
@@ -48,6 +56,9 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
   - `ddos` -> `dds`
   - `forum` -> `frm`
 - The DEP API accepts one `dset` value per request, so the connector loops over configured datasets and issues one request per dataset.
+- The DEP API caps each response at **1000 items** and exposes no pagination/offset/cursor parameter on this endpoint (empirically: a 1-day window returns ~13 items, 30 days ~654, and both 365-day and 1000-day windows return exactly 1000). `fetch_raw` returns whatever the API sends with no cap detection.
+- Consequence: if a single per-dataset run window contains more than 1000 announcements, the excess is silently dropped, and because per-dataset state advances to the window `end` regardless, the dropped items are never re-fetched (permanent loss for that window). Risk scenarios: a large first-run `DEP_LOOKBACK_DAYS`, catch-up after long downtime, or a busy dataset over a wide window.
+- Mitigation until window-chunking is implemented: keep each run window comfortably under 1000 items per dataset (small `DEP_LOOKBACK_DAYS`, frequent `CONNECTOR_RUN_INTERVAL`); be cautious with large backfills. A proper fix would split the `ts`/`te` window into smaller sub-windows whenever a response returns exactly 1000 items.
 
 ## State management
 
@@ -66,8 +77,9 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - `annLink` is repaired for a known scrape bug:
   - `https//...` -> `https://...`
   - `http//...` -> `http://...`
-- `site` and `victimDomain` are stripped; empty strings become `None`.
+- `site`, `victimDomain`, and `naics` are stripped; empty strings become `None`.
 - `sector`, `actor`, and `country` are whitespace-normalized; empty strings, `n/a`, and `none` become `None`.
+- `country_code` (DEP `victimCC`) is upper-cased and kept only when it is a 2-letter alpha ISO 3166-1 code; otherwise `None`.
 - Indicator domain extraction prefers `victimDomain`, then falls back to `site`.
 - Domain normalization uses `urlsplit`, extracts the hostname, and lowercases it.
 - `annDescription` is URL-decoded with `urllib.parse.unquote` before the report or incident is created.
@@ -127,6 +139,7 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - Report custom properties (when present):
   - `dep_actor`
   - `dep_country`
+  - `dep_naics`
 - Report labels always include `DigIntLab`, plus any applicable:
   - `dep:announcement-type:<lowercased enum value>`
   - `dep:dataset:<dataset code>`
@@ -150,6 +163,7 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
   - `first_seen`
   - `dep_actor` when present
   - `dep_country` when present
+  - `dep_naics` when present
 - Incident labels always include `DigIntLab`, plus any applicable:
   - `dep:announcement-type:<lowercased enum value>`
   - `dep:dataset:<dataset code>`
@@ -197,9 +211,11 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
   - victim identity exists
 - Deterministic country location ID:
   - `location--uuid5(NAMESPACE_URL, "dep-country:<country>")`
-- Always set both:
-  - `name=<country>`
-  - `country=<country>`
+- Always set:
+  - `name=<country>` (human-readable country name)
+  - `country=<ISO 3166-1 alpha-2 code from DEP victimCC>`, falling back to the
+    country name when no valid code is available (STIX 2.1 requires `country`,
+    region, or lat/long, so the field is never omitted)
 - Preserve the OpenCTI-specific custom property:
   - `x_opencti_location_type: Country`
 
@@ -319,8 +335,11 @@ Current automated coverage focuses on:
 ## File map
 
 - Connector entrypoint: `main.py`
+- DEP API/auth response validation models: `dep_connector/api_models.py`
 - Data models and STIX converter: `dep_connector/converter_to_stix.py`
 - DEP API client (auth + fetch): `dep_connector/client_api.py`
+- DEP dataset codes and aliases: `dep_connector/datasets.py`
+- STIX object typing helpers: `dep_connector/stix_objects.py`
 - Configuration loader: `dep_connector/config_loader.py`
 - Connector orchestration (run cycle): `dep_connector/connector.py`
 - Package re-export: `dep_connector/__init__.py`
