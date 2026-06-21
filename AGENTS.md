@@ -20,7 +20,7 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - The runtime loop is infinite: `run()` executes one cycle, then sleeps for `CONNECTOR_RUN_INTERVAL`.
 - Local Docker Compose mounts `./config.yml` into `/app/config.yml` for the `dep-connector` service.
 - The local stack pins OpenCTI services to `6.8.13`; the connector manifest declares support for OpenCTI `>= 6.8.13`.
-- The container image runs `python main.py` as the non-root `app` user on Python 3.12.
+- The container image runs `python main.py` as the non-root `app` user on Python 3.14.5.
 
 ## DEP fetch behavior
 
