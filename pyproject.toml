@@ -2,7 +2,7 @@
 name = "opencti-connector"
 version = "0.1.0"
 description = "The Double Extortion connector ingests ransomware and data leak announcements published on the DoubleExtortion platform and converts them into STIX entities inside OpenCTI."
-authors = [{ name = "Luca Mella", email = "lm@digintlab.com" }]
+authors = [{ name = "Edoardo Rosa" }]
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
