@@ -10,6 +10,7 @@ from dep_connector.client_api import DepClient
 from dep_connector.config_loader import load_config
 from dep_connector.converter_to_stix import LeakRecord, PrimaryObject, StixBuilder
 from dep_connector.datasets import DepDataset, dataset_alias_summary
+from dep_connector.stix_objects import StixObject, dedupe_by_stix_id
 
 
 class DepConnector:
@@ -145,6 +146,12 @@ class DepConnector:
         if not client_id:
             error = "DEP client ID must be provided via configuration"
             raise ValueError(error)
+        api_key = pycti.get_config_variable(
+            "DEP_API_KEY", ["dep", "api_key"], config, default=""
+        )
+        if not api_key:
+            error = "DEP API key must be provided via configuration"
+            raise ValueError(error)
         return DepClient(
             login_endpoint=str(
                 pycti.get_config_variable(
@@ -162,9 +169,7 @@ class DepConnector:
                     default="https://api.eu-ep1.doubleextortion.com/v1/dbtr/privlist",
                 )
             ),
-            api_key=pycti.get_config_variable(
-                "DEP_API_KEY", ["dep", "api_key"], config
-            ),
+            api_key=str(api_key),
             username=pycti.get_config_variable(
                 "DEP_USERNAME", ["dep", "username"], config
             ),
@@ -285,8 +290,8 @@ class DepConnector:
         intrusion_set: stix2.IntrusionSet | None,
         sector_identity: stix2.Identity | None,
         country_location: stix2.Location | None,
-    ) -> list[stix2._STIXBase21]:
-        relationships: list[stix2._STIXBase21] = []
+    ) -> list[StixObject]:
+        relationships: list[StixObject] = []
         if intrusion_set and sector_identity:
             relationships.append(
                 self.stix.build_relationship(
@@ -312,8 +317,8 @@ class DepConnector:
         item: LeakRecord,
         victim: stix2.Identity | None,
         incident_id: str | None = None,
-    ) -> list[stix2._STIXBase21]:
-        objects: list[stix2._STIXBase21] = []
+    ) -> list[StixObject]:
+        objects: list[StixObject] = []
         sector_identity: stix2.Identity | None = None
         if self.create_sector_identities and item.sector and victim:
             sector_identity = self.stix.create_sector_identity(item.sector, item)
@@ -362,8 +367,8 @@ class DepConnector:
         victim: stix2.Identity | None,
         indicators: list[stix2.Indicator],
         incident_id: str | None = None,
-    ) -> list[stix2._STIXBase21]:
-        content: list[stix2._STIXBase21] = [self.stix.author_identity]
+    ) -> list[StixObject]:
+        content: list[StixObject] = [self.stix.author_identity]
         if victim:
             content.append(victim)
         content.extend(self._build_optional_entities(item, victim, incident_id))
@@ -373,11 +378,10 @@ class DepConnector:
         )
         return content
 
-    def _send_objects(self, objects: list[stix2._STIXBase21]) -> None:
+    def _send_objects(self, objects: list[StixObject]) -> None:
         if not objects:
             return
-        deduped = {obj.id: obj for obj in objects if getattr(obj, "id", None)}
-        bundle = stix2.Bundle(objects=list(deduped.values()), allow_custom=True)
+        bundle = stix2.Bundle(objects=dedupe_by_stix_id(objects), allow_custom=True)
         self.helper.send_stix2_bundle(
             bundle.serialize(),
             update=True,
@@ -427,7 +431,7 @@ class DepConnector:
         indicators: list[stix2.Indicator],
     ) -> None:
         content = self._build_content(item, victim, indicators)
-        object_refs = [obj.id for obj in content if getattr(obj, "id", None)]
+        object_refs = [obj.id for obj in content]
         report = self.stix.create_report(item, object_refs)
         self._send_objects([*content, report])
 
@@ -446,6 +450,8 @@ class DepConnector:
             self.helper.connect_id,
             f"DEP connector - {now.strftime('%Y-%m-%d %H:%M:%S')} UTC",
         )
+        work_message = f"DEP connector run completed, last_run: {end.isoformat()}"
+        in_error = False
         try:
             token = self.client.authenticate()
             for dataset in self.datasets:
@@ -461,10 +467,16 @@ class DepConnector:
                 self._process_cycle_items(items)
                 self._persist_dataset_state(dataset, end)
                 state = self.helper.get_state() or state
+        except Exception as error:
+            in_error = True
+            work_message = f"DEP connector run failed: {error}"
+            self.helper.log_error(work_message)
+            raise
         finally:
             self.helper.api.work.to_processed(
                 self._current_work_id,
-                f"DEP connector run completed, last_run: {end.isoformat()}",
+                work_message,
+                in_error=in_error,
             )
             self._current_work_id = None
 

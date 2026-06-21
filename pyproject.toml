@@ -6,7 +6,7 @@ authors = [{ name = "notdodo" }, { name = "luca-m" }]
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
-    "pycti>=6.8.13",
+    "pycti>=6.9.0",
     "pyyaml>=6.0.3",
     "requests>=2.32.5",
     "stix2>=3.0.1",

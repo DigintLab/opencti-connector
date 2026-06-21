@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+import requests
 
 from dep_connector.client_api import DepClient
 from dep_connector.datasets import DepDataset
@@ -56,6 +57,17 @@ def test_authenticate_rejects_missing_or_invalid_id_token(payload: object) -> No
     with (
         patch("dep_connector.client_api.requests.post", return_value=response),
         pytest.raises(ValueError, match="Invalid DEP authentication response"),
+    ):
+        _client().authenticate()
+
+
+def test_authenticate_wraps_invalid_json_response() -> None:
+    response = Mock()
+    response.json.side_effect = requests.exceptions.JSONDecodeError("bad", "{}", 0)
+
+    with (
+        patch("dep_connector.client_api.requests.post", return_value=response),
+        pytest.raises(ValueError, match="decode DEP authentication response"),
     ):
         _client().authenticate()
 
@@ -118,6 +130,22 @@ def test_fetch_raw_rejects_invalid_api_payload_shape(payload: object) -> None:
     with (
         patch("dep_connector.client_api.requests.get", return_value=response),
         pytest.raises(ValueError, match="DEP API response"),
+    ):
+        _client().fetch_raw(
+            dataset=DepDataset.EXTORTION,
+            start_date="2026-03-01",
+            end_date="2026-03-27",
+            token="token-123",
+        )
+
+
+def test_fetch_raw_wraps_invalid_json_response() -> None:
+    response = Mock()
+    response.json.side_effect = requests.exceptions.JSONDecodeError("bad", "{}", 0)
+
+    with (
+        patch("dep_connector.client_api.requests.get", return_value=response),
+        pytest.raises(ValueError, match="decode DEP API response"),
     ):
         _client().fetch_raw(
             dataset=DepDataset.EXTORTION,

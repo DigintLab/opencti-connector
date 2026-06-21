@@ -1,38 +1,38 @@
 import json
 import logging
+from typing import TypeVar
 
 import requests
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
-from dep_connector.api_models import CognitoAuthResponse, DepApiItem, DepApiResponse
+from dep_connector.api_models import (
+    COGNITO_AUTH_RESPONSE_ADAPTER,
+    DEP_API_ITEMS_ADAPTER,
+    DepApiItem,
+)
 from dep_connector.datasets import DepDataset
 
 logger = logging.getLogger(__name__)
+TValidatedPayload = TypeVar("TValidatedPayload")
 
 
 def _decode_json_response(response: requests.Response, error_message: str) -> object:
     try:
         payload: object = response.json()
-    except json.JSONDecodeError as exception:
+    except (json.JSONDecodeError, requests.exceptions.JSONDecodeError) as exception:
         raise ValueError(error_message) from exception
     return payload
 
 
-def _extract_auth_token(payload: object) -> str:
+def _validate_payload(
+    adapter: TypeAdapter[TValidatedPayload],
+    payload: object,
+    error_message: str,
+) -> TValidatedPayload:
     try:
-        auth_response = CognitoAuthResponse.model_validate(payload)
+        return adapter.validate_python(payload)
     except ValidationError as exception:
-        error = "Invalid DEP authentication response"
-        raise ValueError(error) from exception
-    return auth_response.authentication_result.id_token
-
-
-def _extract_api_items(payload: object) -> list[DepApiItem]:
-    try:
-        return DepApiResponse.model_validate(payload).root
-    except ValidationError as exception:
-        error = "Invalid DEP API response"
-        raise ValueError(error) from exception
+        raise ValueError(error_message) from exception
 
 
 class DepClient:
@@ -76,7 +76,12 @@ class DepClient:
             response,
             "Unable to decode DEP authentication response",
         )
-        return _extract_auth_token(auth_payload)
+        auth_response = _validate_payload(
+            COGNITO_AUTH_RESPONSE_ADAPTER,
+            auth_payload,
+            "Invalid DEP authentication response",
+        )
+        return auth_response.authentication_result.id_token
 
     def fetch_raw(
         self,
@@ -109,4 +114,6 @@ class DepClient:
         )
         response.raise_for_status()
         payload = _decode_json_response(response, "Unable to decode DEP API response")
-        return _extract_api_items(payload)
+        return _validate_payload(
+            DEP_API_ITEMS_ADAPTER, payload, "Invalid DEP API response"
+        )

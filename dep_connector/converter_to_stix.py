@@ -29,6 +29,9 @@ class PrimaryObject(StrEnum):
     INCIDENT = "incident"
 
 
+_ISO_ALPHA2_LENGTH = 2
+
+
 class LeakRecord(BaseModel):
     model_config = ConfigDict(extra="allow", frozen=True, populate_by_name=True)
 
@@ -40,8 +43,10 @@ class LeakRecord(BaseModel):
     sector: str | None = None
     actor: str | None = None
     country: str | None = None
+    country_code: str | None = Field(default=None, alias="victimCC")
 
     revenue: str | None = None
+    naics: str | None = None
 
     site: str | None = None
     ann_link: str | None = Field(default=None, alias="annLink")
@@ -65,13 +70,23 @@ class LeakRecord(BaseModel):
             return "http://" + v[len("http//") :]
         return v
 
-    @field_validator("site", "victim_domain")
+    @field_validator("site", "victim_domain", "naics")
     @classmethod
     def strip_optional_text(cls, v: str | None) -> str | None:
         if v is None:
             return None
         stripped = v.strip()
         return stripped or None
+
+    @field_validator("country_code")
+    @classmethod
+    def normalize_country_code(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        code = v.strip().upper()
+        if len(code) == _ISO_ALPHA2_LENGTH and code.isalpha():
+            return code
+        return None
 
     @staticmethod
     def _normalize_domain(value: str | None) -> str | None:
@@ -103,6 +118,29 @@ class LeakRecord(BaseModel):
         if normalized.lower() in {"n/a", "none"}:
             return None
         return normalized
+
+    @field_validator("hashid")
+    @classmethod
+    def require_non_empty_hashid(cls, v: str) -> str:
+        if not v.strip():
+            error = "hashid must be a non-empty string"
+            raise ValueError(error)
+        return v
+
+    @field_validator("announcement_types", mode="before")
+    @classmethod
+    def drop_unknown_announcement_types(cls, v: object) -> object:
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            return v
+        known: list[AnnouncementType] = []
+        for entry in v:
+            try:
+                known.append(AnnouncementType(entry))
+            except ValueError:
+                continue
+        return known
 
 
 GENERIC_ACTOR_VALUES = frozenset(
@@ -157,13 +195,15 @@ def _victim_external_references(item: LeakRecord) -> list[dict[str, str]]:
                 description=item.ann_title,
             )
         )
-    if item.site and item.site != item.ann_link:
-        external_references.append(
-            _external_reference(
-                "victim-site",
-                url=_ensure_scheme(item.site),
+    if item.site:
+        site_url = _ensure_scheme(item.site)
+        if site_url != item.ann_link:
+            external_references.append(
+                _external_reference(
+                    "victim-site",
+                    url=site_url,
+                )
             )
-        )
     return external_references
 
 
@@ -236,10 +276,13 @@ class StixBuilder:
     def create_country_location(self, country: str, item: LeakRecord) -> stix2.Location:
         country_key = country.lower()
         location_id = f"location--{uuid5(NAMESPACE_URL, f'dep-country:{country_key}')}"
+        # STIX 2.1 Location requires `country` (or region/lat-long). Prefer DEP's
+        # ISO 3166-1 alpha-2 `victimCC`; fall back to the country name when the
+        # code is missing so the object stays valid.
         return stix2.Location(
             id=location_id,
             name=country,
-            country=country,
+            country=item.country_code or country,
             custom_properties={"x_opencti_location_type": "Country"},
             allow_custom=True,
             **self._common_object_kwargs(item),
@@ -387,4 +430,6 @@ class StixBuilder:
             properties["dep_actor"] = item.actor
         if item.country is not None:
             properties["dep_country"] = item.country
+        if item.naics is not None:
+            properties["dep_naics"] = item.naics
         return properties

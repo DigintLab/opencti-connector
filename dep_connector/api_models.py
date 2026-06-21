@@ -5,8 +5,8 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
-    RootModel,
     StrictStr,
+    TypeAdapter,
     field_validator,
 )
 
@@ -35,5 +35,7 @@ class CognitoAuthResponse(BaseModel):
     )
 
 
-class DepApiResponse(RootModel[list[DepApiItem]]):
-    pass
+COGNITO_AUTH_RESPONSE_ADAPTER: TypeAdapter[CognitoAuthResponse] = TypeAdapter(
+    CognitoAuthResponse
+)
+DEP_API_ITEMS_ADAPTER: TypeAdapter[list[DepApiItem]] = TypeAdapter(list[DepApiItem])
