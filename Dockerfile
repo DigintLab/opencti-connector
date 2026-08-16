@@ -1,4 +1,4 @@
-FROM python:3.14.5-slim AS builder
+FROM python:3.14.6-slim AS builder
 HEALTHCHECK NONE
 
 ENV UV_LINK_MODE=copy \
@@ -21,7 +21,7 @@ COPY dep_connector/ dep_connector/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable --no-dev
 
-FROM python:3.14.5-slim AS runtime
+FROM python:3.14.6-slim AS runtime
 HEALTHCHECK NONE
 
 ENV PATH="/app/.venv/bin:${PATH}"
