@@ -1,9 +1,10 @@
 version: 2
 updates:
-  - package-ecosystem: pip
+  - package-ecosystem: uv
     directory: /
+    versioning-strategy: increase
     schedule:
-      interval: monthly
+      interval: daily
       time: "12:00"
     groups:
       dep-connector:
@@ -14,10 +15,25 @@ updates:
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: monthly
+      interval: daily
       time: "12:00"
     groups:
       dep-connector-docker:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+    ignore:
+      # Keep the connector on Python 3.14 while allowing patch updates.
+      - dependency-name: python
+        versions: [">=3.15"]
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: daily
+      time: "12:00"
+    groups:
+      dep-connector-compose:
         patterns:
           - "*"
     cooldown:

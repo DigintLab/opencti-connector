@@ -27,13 +27,20 @@ The Double Extortion connector ingests ransomware and data-leak announcements pu
 
 1. Copy `config.yml.sample` to `config.yml` and update it with your DEP credentials and OpenCTI configuration.
 
-2. Copy `.env_example` to `.env` and update it with your OpenCTI configuration.
+2. Copy `.env_example` to `.env` and update it with your OpenCTI configuration. Set `OPENCTI_ENCRYPTION_KEY` to a key generated with `openssl rand -base64 32`. For an existing deployment, preserve its encryption key.
 
 3. Run the services:
 
    ```bash
+   docker compose pull
    docker compose up
    ```
+
+The stack follows the upstream [OpenCTI Docker deployment](https://github.com/OpenCTI-Platform/docker/blob/master/docker-compose.yml) and [connector examples](https://github.com/OpenCTI-Platform/connectors), using `latest` tags for the platform, worker, and built-in connectors. The DEP connector joins the same network, uses `http://opencti:8080`, and starts after the platform health check succeeds. Its OpenCTI token and DEP credentials come from `config.yml` or environment variables. See the [connector deployment documentation](https://docs.opencti.io/latest/deployment/connectors/) for networking and dedicated connector-user setup; export connectors require an administrator token.
+
+Existing deployments also need `OPENCTI_ENCRYPTION_KEY`, `XTM_COMPOSER_ID`, and `COMPOSE_PROJECT_NAME` from the updated environment example. Before upgrading a persisted stack, follow the [OpenCTI upgrade guide](https://docs.opencti.io/latest/deployment/upgrade/) and the storage and RabbitMQ migration requirements for the versions being replaced; the upstream storage image is now `pgsty/silo`.
+
+The local environment example sets `ELASTIC_MEMORY_SIZE=1G` for the Elasticsearch JVM heap, leaving memory for OpenCTI and the other containers. If Elasticsearch repeatedly exits with code 137 and Docker reports OOM events, reduce an existing larger heap setting or allocate more memory to Docker. Recreate the service after changing `.env` with `docker compose up -d elasticsearch`.
 
 ## Configuration
 
@@ -123,6 +130,8 @@ docker run --rm \
 
 - The project uses [**go-task**](https://github.com/go-task/task) with a `Taskfile.yml` to streamline common development commands.
 - The project uses [**uv**](https://docs.astral.sh/uv/) as the Python virtual environment and dependency management tool.
+- `uv sync --upgrade` upgrades `uv.lock` and the installed dependencies. It preserves existing version requirements in `pyproject.toml`; update those minimums explicitly to match the resolved versions (for example, `uv add 'requests>=2.33.1'`, or `uv add --dev 'pytest>=9.1.1'`). Commit `pyproject.toml` and `uv.lock` together.
+- Dependabot checks uv dependencies, Dockerfile images, and Compose images daily at 12:00 UTC, with a seven-day release cooldown. Its uv updates raise dependency minimums in `pyproject.toml` along with `uv.lock`; Python base-image updates stay within 3.14.
 - `task test` runs the first-party pytest suite under `tests/`, covering dataset parsing, connector runtime helpers including run-window behavior, and STIX conversion behavior.
 - The connector stores `last_run_by_dataset` in OpenCTI worker state and applies the overlap (`DEP_OVERLAP_HOURS`) independently per dataset. Adding a new dataset later starts that dataset from the full `DEP_LOOKBACK_DAYS` window without affecting the existing ones.
 - Reports and incidents are created with deterministic IDs derived from DEP `hashid`, and bundles are sent with `update=True`, so repeated records update existing objects instead of creating duplicates.
