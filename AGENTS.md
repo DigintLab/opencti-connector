@@ -27,8 +27,9 @@ It should track the code in `main.py`, not stale assumptions from earlier iterat
 - `DEP_CLIENT_ID` is required at startup even though `config.yml.sample` leaves it blank. Missing it raises `ValueError`.
 - The runtime loop is infinite: `run()` executes one cycle, then sleeps for `CONNECTOR_RUN_INTERVAL`.
 - Local Docker Compose mounts `./config.yml` into `/app/config.yml` for the `dep-connector` service.
-- The local stack pins OpenCTI services to `6.9.0` (tested against latest); the connector manifest declares support for OpenCTI `>= 6.8.13` (no 6.9.0-only platform API is used).
-- The container image runs `python main.py` as the non-root `app` user on Python 3.14.5.
+- The local stack follows the upstream OpenCTI Docker/connector examples, using `latest` for OpenCTI services and versioned Redis, Elasticsearch, and RabbitMQ images. The connector manifest declares support for OpenCTI `>= 6.8.13`.
+- The local stack requires `OPENCTI_ENCRYPTION_KEY` in `.env` (generate with `openssl rand -base64 32`); its S3-compatible storage service uses upstream's `pgsty/silo` image.
+- The container image runs `python main.py` as the non-root `app` user on Python 3.14.9.
 
 ## DEP fetch behavior
 

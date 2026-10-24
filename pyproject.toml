@@ -6,10 +6,10 @@ authors = [{ name = "notdodo" }, { name = "luca-m" }]
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
-    "pycti>=6.9.0",
+    "pycti>=7.261023.1",
     "pyyaml>=6.0.3",
-    "requests>=2.32.5",
-    "stix2>=3.0.1",
+    "requests>=2.33.1",
+    "stix2>=3.0.2",
 ]
 
 [project.urls]
@@ -19,11 +19,11 @@ Documentation = "https://github.com/DigintLab/opencti-connector/blob/main/README
 
 [dependency-groups]
 dev = [
-    "mypy[faster-cache]>=1.19.0",
-    "pytest>=8.4.2",
-    "ruff>=0.14.9",
-    "types-pyyaml>=6.0.12.20250915",
-    "types-requests>=2.32.4.20250913",
+    "mypy[faster-cache]>=2.4.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
+    "types-pyyaml>=6.0.12.20260906",
+    "types-requests>=2.33.0.20261006",
 ]
 
 [tool.uv]
@@ -40,6 +40,7 @@ output-format = "github"
 ignore = [
     "BLE001",
     "COM812",
+    "CPY001",
     "D1",
     "D2",
     "D4",
